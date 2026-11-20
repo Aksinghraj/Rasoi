@@ -88,6 +88,8 @@ export interface RetailerAdapter {
   initiateCheckout(cartId: string): Promise<CheckoutResult>;
   getOrderStatus(orderId: string): Promise<{ orderId: string; status: string; note: string }>;
   getDeepLink(query: string): string | null;
+  /** Public store URL used when the search deep link cannot be opened. */
+  getWebFallback(): string | null;
   match(ingredientId: string, quantityBase: number): IngredientMatchResult;
 }
 
@@ -245,6 +247,10 @@ class SandboxRetailerAdapter implements RetailerAdapter {
     return null;
   }
 
+  getWebFallback(): string | null {
+    return null;
+  }
+
   match(ingredientId: string, quantityBase: number): IngredientMatchResult {
     return matchProductsForIngredient(ingredientId, quantityBase, demoProducts, this.info.id);
   }
@@ -280,8 +286,8 @@ class DeepLinkRetailerAdapter implements RetailerAdapter {
   async getServiceability(): Promise<ServiceabilityResult> {
     return {
       serviceable: null,
-      eta: 'Retailer controlled',
-      note: 'Serviceability is confirmed inside the retailer app. Deep-link mode cannot verify it.',
+      eta: '',
+      note: this.info.serviceabilityNote,
       checkedAt: new Date().toISOString(),
     };
   }
@@ -294,8 +300,9 @@ class DeepLinkRetailerAdapter implements RetailerAdapter {
     return null;
   }
 
-  async getInventory(productId: string) {
-    return { productId, inStock: false, checkedAt: new Date().toISOString() };
+  async getInventory(productId: string): Promise<{ productId: string; inStock: boolean; checkedAt: string }> {
+    void productId;
+    throw new RetailerNotSupportedError(this.info.shortName, 'live inventory');
   }
 
   async getPricing(productId: string): Promise<{ productId: string; price: number; checkedAt: string }> {
@@ -343,6 +350,10 @@ class DeepLinkRetailerAdapter implements RetailerAdapter {
     return `${this.info.deepLinkBase}${encodeURIComponent(query)}`;
   }
 
+  getWebFallback(): string | null {
+    return this.info.webFallbackBase ?? null;
+  }
+
   match(ingredientId: string, quantityBase: number): IngredientMatchResult {
     return matchProductsForIngredient(ingredientId, quantityBase, demoProducts);
   }
@@ -377,4 +388,156 @@ export function retailerModeLabel(mode: RetailerMode): string {
   if (mode === 'A') return 'Authorized integration (sandbox)';
   if (mode === 'B') return 'Approved deep link';
   return 'Manual grocery list';
+}
+
+/**
+ * A UI-facing, data-driven summary of what a retailer integration can and
+ * cannot do. Every flag is derived from the adapter capabilities, so the UI
+ * never has to hard-code retailer-specific claims.
+ */
+export interface RetailerCapabilityView {
+  id: string;
+  name: string;
+  shortName: string;
+  logoText: string;
+  accent: string;
+  mode: RetailerMode;
+  modeLabel: string;
+  status: RetailerInfo['status'];
+  description: string;
+  pricingNote: string;
+  stockNote: string;
+  serviceabilityNote: string;
+  handoffTip: string;
+  openLabel: string;
+  /** Rasoi matches ingredient lines to retailer SKUs from its own catalogue. */
+  productMatching: boolean;
+  /** Prices shown are Rasoi estimates, not a retailer quote. */
+  estimatedPricing: boolean;
+  /** A live retailer price verified through an authorised API. */
+  livePricing: boolean;
+  /** A live retailer inventory check through an authorised API. */
+  liveInventory: boolean;
+  /** Serviceability confirmed by a retailer API. */
+  confirmedServiceability: boolean;
+  /** Cart insertion into the real retailer cart. */
+  authorisedCartInsertion: boolean;
+  /** Cart created only inside the local sandbox. */
+  sandboxCart: boolean;
+  /** Checkout completed by Rasoi with the real retailer. */
+  authorisedCheckout: boolean;
+  deepLink: boolean;
+  searchUrl: string | null;
+  webFallbackUrl: string | null;
+}
+
+function modeLabelFor(info: RetailerInfo): string {
+  if (info.status === 'sandbox') return 'Sandbox';
+  if (info.status === 'deeplink') return 'Deep-link';
+  return 'Manual list';
+}
+
+export function getRetailerCapabilityView(retailerId: string): RetailerCapabilityView {
+  const adapter = getRetailerAdapter(retailerId);
+  const info = adapter.info;
+  const sandbox = info.status === 'sandbox';
+
+  return {
+    id: info.id,
+    name: info.name,
+    shortName: info.shortName,
+    logoText: info.logoText,
+    accent: info.accent,
+    mode: info.mode,
+    modeLabel: modeLabelFor(info),
+    status: info.status,
+    description: info.description,
+    pricingNote: info.pricingNote,
+    stockNote: info.stockNote,
+    serviceabilityNote: info.serviceabilityNote,
+    handoffTip: info.handoffTip,
+    openLabel: info.openLabel,
+    // Rasoi always performs its own matching against the demo catalogue.
+    productMatching: true,
+    estimatedPricing: true,
+    // No authorised pricing, inventory, serviceability or cart API is connected.
+    livePricing: false,
+    liveInventory: false,
+    confirmedServiceability: false,
+    authorisedCartInsertion: false,
+    sandboxCart: sandbox && adapter.capabilities.cart,
+    authorisedCheckout: false,
+    deepLink: adapter.capabilities.deepLink,
+    searchUrl: null,
+    webFallbackUrl: adapter.getWebFallback(),
+  };
+}
+
+export function listRetailerCapabilityViews(): RetailerCapabilityView[] {
+  return retailers.map((info) => getRetailerCapabilityView(info.id));
+}
+
+export interface LinkOpener {
+  canOpen(url: string): Promise<boolean>;
+  open(url: string): Promise<void>;
+}
+
+export interface HandoffResult {
+  ok: boolean;
+  usedFallback: boolean;
+  url: string | null;
+  /** Honest, user-facing description of what just happened. */
+  note: string;
+}
+
+/**
+ * Opens a retailer hand-off link, falling back to the public store URL when the
+ * search link cannot be opened. It never claims that anything was added to a
+ * retailer cart.
+ */
+export async function openRetailerHandoff(
+  adapter: RetailerAdapter,
+  query: string,
+  opener: LinkOpener,
+): Promise<HandoffResult> {
+  const primary = adapter.getDeepLink(query);
+  const fallback = adapter.getWebFallback();
+  const notAdded = 'Nothing was added to a retailer cart.';
+
+  if (primary) {
+    try {
+      if (await opener.canOpen(primary)) {
+        await opener.open(primary);
+        return {
+          ok: true,
+          usedFallback: false,
+          url: primary,
+          note: `${adapter.info.shortName} opened with your search. ${notAdded}`,
+        };
+      }
+    } catch {
+      // Fall through to the public web URL.
+    }
+  }
+
+  if (fallback) {
+    try {
+      await opener.open(fallback);
+      return {
+        ok: true,
+        usedFallback: true,
+        url: fallback,
+        note: `${adapter.info.shortName} search could not be opened directly, so the store page was opened instead. ${notAdded}`,
+      };
+    } catch {
+      // Report a clean failure below.
+    }
+  }
+
+  return {
+    ok: false,
+    usedFallback: false,
+    url: null,
+    note: `Could not open ${adapter.info.shortName}. Your Rasoi list is unchanged. ${notAdded}`,
+  };
 }

@@ -11,10 +11,25 @@ export interface RetailerInfo {
   status: 'sandbox' | 'deeplink' | 'manual';
   description: string;
   accent: string;
-  eta: string;
+  /** Only set when a delivery estimate is genuinely known (sandbox demo only). */
+  eta?: string;
   minimumOrder: number;
   deliveryFee: number;
   deepLinkBase?: string;
+  /** Text mark used in place of a retailer logo asset. */
+  logoText: string;
+  /** Label for the primary hand-off action. */
+  openLabel: string;
+  /** How this retailer's prices relate to the estimates Rasoi shows. */
+  pricingNote: string;
+  /** What Rasoi can and cannot know about stock. */
+  stockNote: string;
+  /** Where delivery availability is actually confirmed. */
+  serviceabilityNote: string;
+  /** Retailer-specific guidance for the hand-off. */
+  handoffTip: string;
+  /** Public store URL used if the search deep link cannot be opened. */
+  webFallbackBase?: string;
 }
 
 export const retailers: RetailerInfo[] = [
@@ -25,11 +40,17 @@ export const retailers: RetailerInfo[] = [
     mode: 'A',
     status: 'sandbox',
     description:
-      'Demo retailer sandbox. Cart and checkout are simulated locally so the full journey can be tested. No real order is placed.',
+      'A demo retailer built into Rasoi. Carts and checkout are simulated on this device so the whole journey can be tested. Nothing is sent to a real shop.',
     accent: '#0C3B2E',
     eta: 'Demo · 20–30 min',
     minimumOrder: 199,
     deliveryFee: 0,
+    logoText: 'RM',
+    openLabel: 'Open Rasoi Market',
+    pricingNote: 'Sandbox prices come from Rasoi’s demo catalogue. No real retailer price is involved.',
+    stockNote: 'Sandbox stock is simulated locally and is always available for the demo.',
+    serviceabilityNote: 'Sandbox serviceability only checks that your PIN code looks valid. It is not a delivery promise.',
+    handoffTip: 'Sandbox carts live in this app only and are never transmitted anywhere.',
   },
   {
     id: 'bigbasket',
@@ -38,12 +59,18 @@ export const retailers: RetailerInfo[] = [
     mode: 'B',
     status: 'deeplink',
     description:
-      'Approved deep-link mode. We prepare a matched list and hand you to BigBasket search. Live prices, availability and checkout stay with BigBasket.',
+      'Rasoi matches your list to BigBasket products and opens BigBasket search. BigBasket shows its own live price, stock and delivery slots.',
     accent: '#84B817',
-    eta: 'Retailer controlled',
     minimumOrder: 0,
     deliveryFee: 0,
     deepLinkBase: 'https://www.bigbasket.com/ps/?q=',
+    webFallbackBase: 'https://www.bigbasket.com/',
+    logoText: 'BB',
+    openLabel: 'Open BigBasket',
+    pricingNote: 'Prices shown here are Rasoi estimates from a demo catalogue, not BigBasket’s live price.',
+    stockNote: 'BigBasket stock is checked inside BigBasket. Rasoi cannot read BigBasket inventory.',
+    serviceabilityNote: 'BigBasket confirms whether it delivers to your address after you open the app.',
+    handoffTip: 'Opens a BigBasket search for each item. Your Rasoi list stays saved so you can compare item by item.',
   },
   {
     id: 'blinkit',
@@ -52,12 +79,18 @@ export const retailers: RetailerInfo[] = [
     mode: 'B',
     status: 'deeplink',
     description:
-      'Approved deep-link mode. We open Blinkit search for each matched item. Final prices, stock and delivery are controlled by Blinkit.',
+      'Rasoi matches your list to Blinkit products and opens Blinkit search. Blinkit shows its own live price, stock and delivery estimate.',
     accent: '#F8CB46',
-    eta: 'Retailer controlled',
     minimumOrder: 0,
     deliveryFee: 0,
     deepLinkBase: 'https://blinkit.com/s/?q=',
+    webFallbackBase: 'https://blinkit.com/',
+    logoText: 'BL',
+    openLabel: 'Open Blinkit',
+    pricingNote: 'Blinkit prices change through the day. The totals here are Rasoi estimates and are never a Blinkit quote.',
+    stockNote: 'Blinkit availability depends on your local store. Only the Blinkit app can confirm it.',
+    serviceabilityNote: 'Blinkit confirms whether your address is serviceable when you open the app.',
+    handoffTip: 'Opens Blinkit search. Add items there — Rasoi cannot create or edit a Blinkit cart.',
   },
   {
     id: 'zepto',
@@ -66,12 +99,18 @@ export const retailers: RetailerInfo[] = [
     mode: 'B',
     status: 'deeplink',
     description:
-      'Approved deep-link mode. We open Zepto search for each matched item. Final prices, stock and delivery are controlled by Zepto.',
+      'Rasoi matches your list to Zepto products and opens Zepto search. Zepto shows its own live price, stock and delivery estimate.',
     accent: '#6C2BD9',
-    eta: 'Retailer controlled',
     minimumOrder: 0,
     deliveryFee: 0,
     deepLinkBase: 'https://www.zeptonow.com/search?query=',
+    webFallbackBase: 'https://www.zeptonow.com/',
+    logoText: 'ZP',
+    openLabel: 'Open Zepto',
+    pricingNote: 'Zepto runs its own pricing and offers. The totals here are Rasoi estimates, not a Zepto price.',
+    stockNote: 'Zepto stock is not exposed to Rasoi. Check each item inside Zepto before paying.',
+    serviceabilityNote: 'Zepto confirms delivery for your location inside its app.',
+    handoffTip: 'Opens Zepto search for the first item. Use Share list to work through the rest in the Zepto app.',
   },
   {
     id: 'instamart',
@@ -80,12 +119,18 @@ export const retailers: RetailerInfo[] = [
     mode: 'B',
     status: 'deeplink',
     description:
-      'Approved deep-link mode. We open Instamart search for each matched item. Final prices, stock and delivery are controlled by Swiggy.',
+      'Rasoi matches your list to Instamart products and opens Instamart search. Swiggy shows its own live price, stock and delivery estimate.',
     accent: '#FC8019',
-    eta: 'Retailer controlled',
     minimumOrder: 0,
     deliveryFee: 0,
     deepLinkBase: 'https://www.swiggy.com/instamart/search?query=',
+    webFallbackBase: 'https://www.swiggy.com/instamart',
+    logoText: 'IM',
+    openLabel: 'Open Instamart',
+    pricingNote: 'Instamart prices and fees are set by Swiggy. Rasoi estimates are indicative only.',
+    stockNote: 'Instamart stock is managed by Swiggy and is not visible to Rasoi.',
+    serviceabilityNote: 'Instamart delivery availability is confirmed by Swiggy inside the app.',
+    handoffTip: 'Opens Instamart search. Your Rasoi list is kept unchanged so you can follow it in Swiggy.',
   },
 ];
 
