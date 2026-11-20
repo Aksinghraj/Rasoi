@@ -222,7 +222,7 @@ export default function CheckoutScreen() {
       <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: spacing.xxxl }} showsVerticalScrollIndicator={false}>
         <RetailerStatusCard
           view={view}
-          estimate={retailerMatches ? estimateTotal : null}
+          estimate={retailerMatches && matchedCount > 0 ? estimateTotal : null}
           matchedLines={matchedCount}
           totalLines={totalLines}
           onOpen={!isSandbox && buyLines.length > 0 ? () => handOff(buyLines[0].line.name) : undefined}

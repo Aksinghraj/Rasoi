@@ -568,7 +568,7 @@ export default function GroceryScreen() {
               key={comparison.retailerId}
               variant="compact"
               view={view}
-              estimate={comparison.total}
+              estimate={comparison.matchedLines > 0 ? comparison.total : null}
               matchedLines={comparison.matchedLines}
               totalLines={comparison.totalLines}
               onPress={() => {

@@ -25,7 +25,7 @@ Rasoi is an India-first meal planning and smart grocery app built with Expo and 
 - **Custom recipes** with ingredient picker, steps, equipment and estimated nutrition and cost.
 - **Preferences and privacy**: diet/allergen/restriction editing, budget, location, language, consent toggles, JSON export and account deletion.
 - **Demo admin console**: analytics, recipe verification, ingredient master, retailer status and audit log.
-- **Automated engine tests** (29 tests) covering conversions, aggregation, pantry deduction, pack optimisation, allergen safety, planner and adapter honesty.
+- **Automated engine tests** (40 tests) covering conversions, aggregation, pantry deduction, pack optimisation, allergen safety, planner, account roles, retailer-specific matching and adapter honesty.
 
 ---
 
@@ -133,6 +133,37 @@ Engines are pure functions over plain data. That keeps the important logic testa
 - **Restrictions and dislikes are soft.** Restrictions reduce the score; dislikes are a preference signal. Nothing is ever silently substituted.
 - **Pantry is user-declared.** Rasoi never assumes an ingredient is available.
 - **No retailer claim is invented.** Sandbox orders are labelled `sandbox_created`; deep-link hand-offs are `handed_off` or `copied`; nothing is called "placed".
+- **Roles are server-owned.** Self-service phone/email sign-up always creates a non-admin user. Only the seeded demo account is an admin in this build; production roles come from the server.
+
+---
+
+## Backend migration boundary
+
+The demo intentionally keeps state in AsyncStorage so the whole product can be exercised without infrastructure. Production work should replace the persistence, authentication and retailer-network boundary without changing screens or engines:
+
+| Boundary | Demo (this build) | Production |
+| --- | --- | --- |
+| Persistence | `lib/store/AppContext.tsx` writes the whole state to AsyncStorage (debounced 250 ms) | Same context actions call API routes; local cache remains for offline use |
+| Authentication | Local OTP generated and shown on screen; `lib/auth/users.ts` creates the profile | Server issues OTPs, verifies hashes, creates sessions and assigns roles |
+| Roles | `createSelfServiceUser` always sets `isAdmin: false`; only `createDemoUser` is admin | `is_admin` is set only by a trusted back office; clients can never submit it |
+| Retailers | `lib/retailers/adapters.ts` runs in-process; sandbox carts are in memory | Adapters call server routes; OAuth client credentials stay in server env only |
+| Engines | Pure functions in `lib/engine/` | Reused on the server for consistent plans, lists and pricing |
+
+### Server-backed authentication and roles
+
+- `POST /auth/otp` stores a hash of the code in `otp_requests` with a short expiry and a per-identifier rate limit. The plain code never leaves the server.
+- `POST /auth/verify` consumes the OTP atomically, creates or finds the user, sets `is_admin` from server-side policy (default `false`) and returns a session token. Only the token hash is stored in `sessions`.
+- Sign-up paths must never accept `isAdmin` from the client. Admin grants happen through an authenticated back-office action and are written to `audit_logs`.
+- The demo admin exists only in the local demo seed and is not reachable through phone/email sign-up.
+
+### Data, consent, deletion and synchronisation
+
+- **Scoping:** every user-owned table is read and written with `user_id` from the session. The API never trusts a user id supplied in the body.
+- **Consent:** `consents` is explicit and separate for personalisation, analytics, offers and retailer sharing. Analytics events and retailer hand-off history are only written when the matching consent is on. Withdrawing consent stops future writes and queues a purge of the affected derived data.
+- **Export:** `GET /export` returns the user, household, preferences, consents, plans, pantry, extras, orders, cooking history and audit entries as one JSON document.
+- **Deletion:** `DELETE /account` revokes sessions, soft-deletes the user (`deleted_at`), then purges owned rows and cached exports. Locally, the app removes its AsyncStorage key immediately, as it does today.
+- **Sync:** the client queues mutations with a local timestamp and replays them when online. The server is the source of truth on conflict; deletions are tombstoned so they are not resurrected by a stale device. Checked grocery items, pantry quantities, plans and cooking progress sync per user; sandbox carts remain device-local.
+- **Retailer credentials:** client secrets are never bundled. The app calls the backend proxy, and deep-link mode needs no credentials at all.
 
 ---
 
@@ -532,8 +563,13 @@ Covered:
 - planner servings add/update
 - deep-link adapters refusing unsupported operations
 - retailer capability views never claiming live price, stock or cart access
+- deep-link serviceability never reported as confirmed
 - deep-link hand-off, store-page fallback and honest failure copy
+- failed hand-offs leaving the Rasoi shopping list untouched
 - sandbox cart/checkout never claiming a real order
+- self-service users never receiving admin privileges
+- demo catalogue prices never labelled as verified live prices
+- BigBasket, Blinkit, Zepto and Instamart checkouts matching only their own catalogue products
 
 Type checking:
 
