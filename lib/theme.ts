@@ -1,28 +1,35 @@
 import { Platform } from 'react-native';
 
 export const colors = {
-  forest: '#0C3B2E',
-  forestDeep: '#07261D',
-  forestSoft: '#1B5A45',
-  mint: '#DDF3E7',
-  mintStrong: '#9EDFC3',
-  mintPale: '#EFF9F3',
-  cream: '#FBF7EE',
-  creamDeep: '#F3ECDD',
-  white: '#FFFFFF',
-  ink: '#15211B',
-  inkSoft: '#55655C',
-  inkFaint: '#8A968E',
-  line: '#E4E7E1',
-  lineSoft: '#EEF0EB',
-  orange: '#E87A32',
-  orangeSoft: '#FCE8D8',
-  red: '#BC4238',
-  redSoft: '#FBE6E3',
-  yellow: '#F2C14E',
-  yellowSoft: '#FBF0D3',
-  blue: '#3C6E8F',
-  blueSoft: '#E5EFF5',
+  forest: '#2F3A2A',
+  forestDeep: '#1E261B',
+  forestSoft: '#4A5741',
+  olive: '#2F3A2A',
+  oliveDeep: '#1E261B',
+  oliveSoft: '#4A5741',
+  mint: '#DDE6D3',
+  mintStrong: '#A9BF98',
+  mintPale: '#EDF1E4',
+  cream: '#F7F2E7',
+  creamDeep: '#EDE5D4',
+  ivory: '#F7F2E7',
+  paper: '#FFFDF8',
+  white: '#FFFDF8',
+  ink: '#1F241C',
+  inkSoft: '#5B6254',
+  inkFaint: '#8D9384',
+  line: '#DED8C8',
+  lineSoft: '#EAE4D6',
+  terracotta: '#B4552F',
+  terracottaSoft: '#F4E2D6',
+  orange: '#B4552F',
+  orangeSoft: '#F4E2D6',
+  red: '#A63D32',
+  redSoft: '#F6E1DC',
+  yellow: '#C99A3E',
+  yellowSoft: '#F5EBD2',
+  blue: '#46687A',
+  blueSoft: '#E6EDF0',
 } as const;
 
 export const spacing = {
@@ -36,10 +43,10 @@ export const spacing = {
 } as const;
 
 export const radius = {
-  sm: 10,
-  md: 14,
-  lg: 20,
-  xl: 26,
+  sm: 6,
+  md: 10,
+  lg: 14,
+  xl: 18,
   pill: 999,
 } as const;
 
@@ -47,22 +54,23 @@ export const fonts = {
   regular: Platform.select({ ios: 'System', android: 'sans-serif', default: 'System' }),
   medium: Platform.select({ ios: 'System', android: 'sans-serif-medium', default: 'System' }),
   bold: Platform.select({ ios: 'System', android: 'sans-serif', default: 'System' }),
+  serif: Platform.select({ ios: 'Georgia', android: 'serif', default: 'Georgia' }),
 } as const;
 
 export const shadow = {
   card: {
-    shadowColor: '#0C3B2E',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.07,
-    shadowRadius: 16,
-    elevation: 2,
+    shadowColor: '#1E261B',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 1,
   },
   raised: {
-    shadowColor: '#0C3B2E',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.12,
-    shadowRadius: 24,
-    elevation: 5,
+    shadowColor: '#1E261B',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 4,
   },
 } as const;
 

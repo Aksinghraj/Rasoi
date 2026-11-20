@@ -14,7 +14,7 @@ import {
   X,
 } from 'lucide-react-native';
 import { useApp } from '@/lib/store/AppContext';
-import { Button, Card, EmptyState, InfoBanner, ProgressBar, ScreenHeader, Txt } from '@/components/ui';
+import { Button, Card, EmptyState, Eyebrow, InfoBanner, ProgressBar, ScreenHeader, Txt } from '@/components/ui';
 import { colors, radius, spacing } from '@/lib/theme';
 import { formatQuantity } from '@/lib/engine/units';
 import { getIngredient } from '@/lib/data/ingredients';
@@ -147,9 +147,7 @@ export default function CookingModeScreen() {
           <X size={20} color={colors.mint} />
         </Pressable>
         <View style={{ flex: 1, paddingHorizontal: spacing.md }}>
-          <Txt variant="tiny" color={colors.mintStrong} style={{ fontWeight: '700' }} numberOfLines={1}>
-            COOKING · {recipe.name.toUpperCase()}
-          </Txt>
+          <Eyebrow color={colors.mintStrong}>Cooking · {recipe.name}</Eyebrow>
           <View style={{ marginTop: 6 }}>
             <ProgressBar value={progress} tone={colors.mintStrong} height={6} />
           </View>
@@ -162,13 +160,11 @@ export default function CookingModeScreen() {
       </View>
 
       <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: spacing.xxxl }} showsVerticalScrollIndicator={false}>
-        <View style={styles.stepBadge}>
-          <Txt variant="tiny" color={colors.forest} style={{ fontWeight: '800' }}>
-            STEP {stepIndex + 1} OF {totalSteps}
-          </Txt>
-        </View>
+        <Eyebrow color={colors.mintStrong}>
+          Step {stepIndex + 1} of {totalSteps}
+        </Eyebrow>
 
-        <Txt variant="h1" color={colors.white} style={{ marginTop: spacing.md }}>
+        <Txt variant="display" color={colors.white} style={{ marginTop: spacing.sm }}>
           {step?.text ?? 'All steps complete.'}
         </Txt>
         {step?.tip ? (
@@ -318,16 +314,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
   },
-  stepBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: colors.mintStrong,
-    borderRadius: radius.pill,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
   timerCard: {
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderRadius: radius.lg,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
     padding: spacing.lg,
     marginTop: spacing.xl,
   },

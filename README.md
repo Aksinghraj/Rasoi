@@ -546,6 +546,40 @@ A plain shopping list the user takes to any shop. No retailer API is involved.
 
 ---
 
+## UI/UX refinement
+
+The interface was moved from a friendly utility look to a warmer, editorial Indian food-planning identity. The functional architecture, routing, data and engine behaviour are unchanged.
+
+### Design system
+
+- **Palette:** deep olive (`#2F3A2A`) replaces the brighter forest green; warm ivory (`#F7F2E7`) replaces cool cream; terracotta (`#B4552F`) is the single accent. Sage tones remain for quiet surfaces.
+- **Typography:** display, h1 and h2 now use a system serif (`Georgia` on iOS, `serif` on Android) for an editorial voice. Body, labels and buttons stay on the platform sans-serif for legibility.
+- **Shape:** corner radii were reduced (cards 14 → 10 or 6, back buttons 19 → 6). Shadows are lighter; hairline rules carry most separation.
+- **Rhythm:** sections now use an uppercase terracotta eyebrow above a serif heading, with tighter spacing and fewer pill containers.
+
+### Screen-by-screen
+
+| Screen | What changed | Why it helps | Preserved | Needs device testing |
+| --- | --- | --- | --- | --- |
+| Home | Serif greeting and date eyebrow; household facts shown as one quiet meta line instead of three pills; quick actions became a ruled index strip; section eyebrows added; flat hero and saved rows. | Reads like a daily menu cover rather than a dashboard; quicker scanning of what matters tonight. | Recommendations, budget, today's menu, favourites, recent, notifications sheet, cooking resume. | Long names, 320 dp width, font scaling 1.35. |
+| Recipes | Editorial masthead; search became an underlined field; surprise strip and add action lost their filled pills; recipe cards use squared corners, a lighter frame and terracotta reason rules. | Search feels primary; photography leads; filters no longer compete with content. | Search, meal-slot and mode chips, sort, filters, favourites, surprise me, empty state. | Keyboard overlap, horizontal chip scrolling, Android back from sheets. |
+| Recipe detail | Cuisine eyebrow, serif dish title, squared hero controls, flatter ingredient/nutrition/method cards. | A recipe page should read like a page, not a settings screen. | Servings scaling, allergens, safety conflicts, equipment gaps, grocery hand-off, cooking start, custom-recipe delete. | Long ingredient names, nutrition row at large text sizes. |
+| Weekly planner | Week-at-a-glance eyebrow; day cards squared with a terracotta date rule; regenerate action squared. | Makes the week the object of attention and reduces card-on-card noise. | Week navigation, generate/regenerate, add/replace/remove, servings, copy, duplicate, blank week, share, delete. | Date strip wrapping, sheet height on small screens. |
+| Grocery list | Receipt-style basket header with eyebrow and larger total; aisle eyebrows; flat line items; retailer comparison unchanged. | The list reads like a shopping receipt; estimates remain visually distinct from retailer actions. | Aggregation, pantry deduction, checked state, extras, share/copy, retailer comparison, honesty labels. | Checkbox touch targets, long item names, share sheet. |
+| Pantry | Stats became a ruled band; grouped rows and expiry badges kept; flatter cards. | Inventory feels like a kitchen ledger rather than a stats dashboard. | Add/edit/remove, staples, expiry, auto-deduct, search, sheets. | Date input keyboard, grouped list scrolling. |
+| Cooking mode | Step counter became an eyebrow; step instruction uses serif display; timer panel is a hairline frame. | Keeps the cook focused on one instruction with less chrome. | Timers, ingredient checklist, resume, previous/next, finish, exit. | Timer while backgrounded, large text, landscape. |
+| Checkout | Retailer status card squared and flattened; serviceability and hand-off copy untouched. | Keeps honesty messaging prominent while matching the new visual language. | Per-retailer matching, estimates, deep links, fallback, list preservation, sandbox flow. | External app hand-off and return on Android. |
+| Onboarding | Step counter eyebrow; serif question headings; quieter progress bar. | Turns a long form into a guided conversation. | All 10 steps, validation, household members, budget, location, review, demo seeding. | Keyboard avoidance, small screens, back behaviour. |
+| Authentication | Serif welcome and hero copy retained; surfaces now ivory/paper. | Warmer first impression without changing the OTP flow. | Phone/email OTP, demo code, demo kitchen entry, error states. | Keyboard, OTP paste, iframe preview. |
+| Profile | Hero eyebrow; olive panel; ruled stats. | Personal space feels like a kitchen journal. | Profile edit, household, notifications, plans, orders, export, sign out, delete, admin link. | Sheet heights, destructive confirmation. |
+| Preferences, privacy, admin | Shared header and card refinements only. | Consistency with the rest of the app. | Every toggle, export, deletion, admin table and audit action. | Dense admin tables on narrow screens. |
+
+### Validation boundary
+
+`bun run typecheck` and `bun test` pass after this pass. Layouts were reviewed in code and through the Expo web preview; **physical Android device testing (font scaling, keyboard, external retailer hand-off, back stack) is still required** before calling the redesign complete. No functionality, data or retailer integration mode was removed or invented.
+
+---
+
 ## Testing
 
 ```bash

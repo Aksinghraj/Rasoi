@@ -54,7 +54,7 @@ export function RecipeCard({
         onPress={onPress}
         style={({ pressed }) => [styles.rowCard, pressed && { opacity: 0.86 }]}
       >
-        <FoodImage uri={recipe.image} height={92} borderRadius={radius.md}>
+        <FoodImage uri={recipe.image} height={92} borderRadius={radius.sm}>
           <View style={styles.rowImageOverlay}>
             <DietMark foodType={recipe.foodType} />
           </View>
@@ -102,7 +102,7 @@ export function RecipeCard({
       onPress={onPress}
       style={({ pressed }) => [styles.card, pressed && { opacity: 0.9, transform: [{ scale: 0.997 }] }]}
     >
-      <FoodImage uri={recipe.image} height={172} borderRadius={radius.lg}>
+      <FoodImage uri={recipe.image} height={188} borderRadius={radius.sm}>
         <View style={styles.topRow}>
           <View style={styles.dietPill}>
             <DietMark foodType={recipe.foodType} />
@@ -187,11 +187,11 @@ export function RecipeCard({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: colors.white,
-    borderRadius: radius.lg,
+    backgroundColor: colors.paper,
+    borderRadius: radius.sm,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: colors.lineSoft,
+    borderColor: colors.line,
     marginBottom: spacing.lg,
   },
   topRow: {
@@ -225,18 +225,19 @@ const styles = StyleSheet.create({
   metaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   dot: { width: 3, height: 3, borderRadius: 2, backgroundColor: colors.inkFaint },
   reason: {
-    backgroundColor: colors.mintPale,
-    borderRadius: radius.pill,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    backgroundColor: 'transparent',
+    borderLeftWidth: 2,
+    borderLeftColor: colors.terracotta,
+    paddingLeft: 6,
+    paddingVertical: 1,
   },
   rowCard: {
     flexDirection: 'row',
     gap: spacing.md,
-    backgroundColor: colors.white,
-    borderRadius: radius.md,
+    backgroundColor: colors.paper,
+    borderRadius: radius.sm,
     borderWidth: 1,
-    borderColor: colors.lineSoft,
+    borderColor: colors.line,
     padding: spacing.sm,
     marginBottom: spacing.sm,
   },

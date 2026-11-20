@@ -28,6 +28,7 @@ import { useApp } from '@/lib/store/AppContext';
 import {
   Button,
   Chip,
+  Eyebrow,
   Field,
   InfoBanner,
   ProgressBar,
@@ -264,9 +265,7 @@ export default function OnboardingScreen() {
               </View>
             )}
             <View style={{ flex: 1 }}>
-              <Txt variant="tiny" color={colors.inkFaint} style={{ fontWeight: '700' }}>
-                STEP {step + 1} OF {STEPS.length}
-              </Txt>
+              <Eyebrow>Step {step + 1} of {STEPS.length}</Eyebrow>
               <Txt variant="h3" numberOfLines={1}>
                 {current.title}
               </Txt>

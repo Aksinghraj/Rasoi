@@ -22,6 +22,7 @@ import {
   Card,
   Divider,
   EmptyState,
+  Eyebrow,
   FoodImage,
   InfoBanner,
   ScreenHeader,
@@ -139,11 +140,9 @@ export default function RecipeDetailScreen() {
         <View style={{ padding: spacing.xl }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             <DietMark foodType={recipe.foodType} size={15} />
-            <Txt variant="tiny" color={colors.orange} style={{ fontWeight: '800', textTransform: 'uppercase' }}>
-              {recipe.cuisine} · {recipe.region}
-            </Txt>
+            <Eyebrow>{recipe.cuisine} · {recipe.region}</Eyebrow>
           </View>
-          <Txt variant="h1" style={{ marginTop: 4 }}>
+          <Txt variant="display" style={{ marginTop: 6 }}>
             {recipe.name}
           </Txt>
           <Txt variant="small" color={colors.inkSoft} style={{ marginTop: 6 }}>

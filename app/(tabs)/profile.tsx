@@ -29,6 +29,7 @@ import {
   Card,
   Chip,
   Divider,
+  Eyebrow,
   Field,
   InfoBanner,
   Sheet,
@@ -100,6 +101,7 @@ export default function ProfileScreen() {
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
             <Avatar name={state.user?.name ?? 'Rasoi'} size={56} />
             <View style={{ flex: 1 }}>
+              <Eyebrow color={colors.mintStrong}>Your kitchen</Eyebrow>
               <Txt variant="h2" color={colors.white} numberOfLines={1}>
                 {state.user?.name ?? 'Rasoi cook'}
               </Txt>

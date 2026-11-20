@@ -35,6 +35,7 @@ import {
   Divider,
   EmptyState,
   ErrorState,
+  Eyebrow,
   Field,
   InfoBanner,
   ProgressBar,
@@ -152,8 +153,11 @@ export default function GroceryScreen() {
       <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: spacing.xxxl }} showsVerticalScrollIndicator={false}>
         <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
           <View style={{ flex: 1 }}>
-            <Txt variant="h1">Grocery list</Txt>
-            <Txt variant="small" color={colors.inkSoft} style={{ marginTop: 2 }}>
+            <Eyebrow>The shopping list</Eyebrow>
+            <Txt variant="display" style={{ marginTop: 2 }}>
+              Grocery list
+            </Txt>
+            <Txt variant="small" color={colors.inkSoft} style={{ marginTop: 4 }}>
               {activePlan ? activePlan.name : 'No plan yet'}
             </Txt>
           </View>
@@ -207,10 +211,8 @@ export default function GroceryScreen() {
             <Card style={{ marginTop: spacing.lg }}>
               <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
                 <View style={{ flex: 1 }}>
-                  <Txt variant="tiny" color={colors.inkFaint} style={{ fontWeight: '700' }}>
-                    ESTIMATED BASKET
-                  </Txt>
-                  <Txt variant="display" style={{ fontSize: 30 }}>
+                  <Eyebrow>Estimated basket</Eyebrow>
+                  <Txt variant="display" style={{ fontSize: 34 }}>
                     {formatINR(grocery.totals.estimated)}
                   </Txt>
                   <Txt variant="tiny" color={colors.inkSoft}>
@@ -298,7 +300,7 @@ export default function GroceryScreen() {
 
             {grocery.sections.map((section) => (
               <View key={section.category}>
-                <SectionHeader title={section.title} subtitle={`${section.lines.length} items`} />
+                <SectionHeader eyebrow="Aisle" title={section.title} subtitle={`${section.lines.length} items`} />
                 <Card padded={false}>
                   {section.lines.map((line, index) => (
                     <View key={line.key}>
@@ -352,7 +354,7 @@ export default function GroceryScreen() {
 
             {grocery.extras.length > 0 ? (
               <>
-                <SectionHeader title="Added by you" subtitle={`${grocery.extras.length} items`} />
+                <SectionHeader eyebrow="Your additions" title="Added by you" subtitle={`${grocery.extras.length} items`} />
                 <Card padded={false}>
                   {grocery.extras.map((extra, index) => (
                     <View key={extra.key}>

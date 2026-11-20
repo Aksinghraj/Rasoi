@@ -27,6 +27,7 @@ import {
   Chip,
   Divider,
   EmptyState,
+  Eyebrow,
   Field,
   FoodImage,
   InfoBanner,
@@ -220,8 +221,11 @@ export default function PlanScreen() {
       <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: spacing.xxxl }} showsVerticalScrollIndicator={false}>
         <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
           <View style={{ flex: 1 }}>
-            <Txt variant="h1">Meal plan</Txt>
-            <Txt variant="small" color={colors.inkSoft} style={{ marginTop: 2 }}>
+            <Eyebrow>Your week</Eyebrow>
+            <Txt variant="display" style={{ marginTop: 2 }}>
+              Meal plan
+            </Txt>
+            <Txt variant="small" color={colors.inkSoft} style={{ marginTop: 4 }}>
               Seven days, one smart grocery list
             </Txt>
           </View>
@@ -314,7 +318,8 @@ export default function PlanScreen() {
         ) : (
           <>
             <Card style={{ marginTop: spacing.lg }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Eyebrow>This week at a glance</Eyebrow>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: spacing.sm }}>
                 <View style={styles.stat}>
                   <Txt variant="h2">{mealCount}</Txt>
                   <Txt variant="tiny" color={colors.inkSoft}>meals planned</Txt>
@@ -346,7 +351,7 @@ export default function PlanScreen() {
               const stats = dayStats(weekPlan, day.date);
               const isToday = day.date === todayISO();
               return (
-                <Card key={day.date} padded={false} style={{ marginTop: spacing.lg, overflow: 'hidden' }}>
+                <Card key={day.date} padded={false} style={{ marginTop: spacing.lg, overflow: 'hidden', borderRadius: radius.sm }}>
                   <View style={[styles.dayHeader, isToday && { backgroundColor: colors.mintPale }]}>
                     <View style={[styles.dateBadge, isToday && { backgroundColor: colors.forest }]}>
                       <Txt variant="tiny" color={isToday ? colors.mintStrong : colors.inkFaint} style={{ fontWeight: '700' }}>
@@ -768,20 +773,27 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     padding: spacing.md,
     paddingHorizontal: spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.lineSoft,
   },
   dateBadge: {
-    width: 48,
-    height: 52,
-    borderRadius: radius.sm,
-    backgroundColor: colors.mintPale,
-    alignItems: 'center',
+    width: 44,
+    height: 50,
+    borderRadius: 0,
+    borderLeftWidth: 2,
+    borderLeftColor: colors.terracotta,
+    backgroundColor: 'transparent',
+    alignItems: 'flex-start',
     justifyContent: 'center',
+    paddingLeft: 8,
   },
   dayAction: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: colors.mintPale,
+    width: 30,
+    height: 30,
+    borderRadius: radius.sm,
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: colors.line,
     alignItems: 'center',
     justifyContent: 'center',
   },

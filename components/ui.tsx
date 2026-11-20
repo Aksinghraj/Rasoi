@@ -18,7 +18,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, Info, Minus, Plus, Utensils, X } from 'lucide-react-native';
-import { colors, radius, shadow, spacing } from '@/lib/theme';
+import { colors, fonts, radius, shadow, spacing } from '@/lib/theme';
 
 type TextVariant =
   | 'display'
@@ -62,10 +62,10 @@ export function Txt({
 }
 
 const textStyles = StyleSheet.create({
-  display: { fontSize: 32, lineHeight: 38, fontWeight: '800', letterSpacing: -0.8 },
-  h1: { fontSize: 26, lineHeight: 32, fontWeight: '800', letterSpacing: -0.5 },
-  h2: { fontSize: 21, lineHeight: 27, fontWeight: '700', letterSpacing: -0.3 },
-  h3: { fontSize: 17, lineHeight: 23, fontWeight: '700' },
+  display: { fontFamily: fonts.serif, fontSize: 34, lineHeight: 40, fontWeight: '600', letterSpacing: -0.9 },
+  h1: { fontFamily: fonts.serif, fontSize: 28, lineHeight: 34, fontWeight: '600', letterSpacing: -0.6 },
+  h2: { fontFamily: fonts.serif, fontSize: 22, lineHeight: 28, fontWeight: '600', letterSpacing: -0.3 },
+  h3: { fontSize: 17, lineHeight: 23, fontWeight: '700', letterSpacing: -0.1 },
   body: { fontSize: 15, lineHeight: 22, fontWeight: '400' },
   bodyStrong: { fontSize: 15, lineHeight: 22, fontWeight: '600' },
   small: { fontSize: 13, lineHeight: 18, fontWeight: '400' },
@@ -276,29 +276,47 @@ export function SectionHeader({
   actionLabel,
   onAction,
   subtitle,
+  eyebrow,
 }: {
   title: string;
   actionLabel?: string;
   onAction?: () => void;
   subtitle?: string;
+  eyebrow?: string;
 }) {
   return (
     <View style={styles.sectionHeader}>
       <View style={{ flex: 1 }}>
+        {eyebrow ? <Eyebrow>{eyebrow}</Eyebrow> : null}
         <Txt variant="h2">{title}</Txt>
         {subtitle ? (
-          <Txt variant="small" color={colors.inkSoft} style={{ marginTop: 2 }}>
+          <Txt variant="small" color={colors.inkSoft} style={{ marginTop: 3 }}>
             {subtitle}
           </Txt>
         ) : null}
       </View>
       {actionLabel && onAction ? (
         <Pressable accessibilityRole="button" onPress={onAction} hitSlop={8}>
-          <Text style={{ color: colors.forest, fontWeight: '700', fontSize: 13 }}>{actionLabel}</Text>
+          <Text style={{ color: colors.terracotta, fontWeight: '700', fontSize: 13 }}>{actionLabel}</Text>
         </Pressable>
       ) : null}
     </View>
   );
+}
+
+export function Eyebrow({ children, color = colors.terracotta }: { children: ReactNode; color?: string }) {
+  return (
+    <Text
+      maxFontSizeMultiplier={1.2}
+      style={{ color, fontSize: 11, lineHeight: 15, fontWeight: '700', letterSpacing: 1.4, textTransform: 'uppercase' }}
+    >
+      {children}
+    </Text>
+  );
+}
+
+export function Rule({ style }: { style?: StyleProp<ViewStyle> }) {
+  return <View style={[{ height: 1, backgroundColor: colors.line }, style]} />;
 }
 
 export function EmptyState({
@@ -689,8 +707,7 @@ export const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.lineSoft,
     ...shadow.card,
-  },
-  button: {
+  },  button: {
     borderRadius: radius.pill,
     flexDirection: 'row',
     alignItems: 'center',
@@ -806,20 +823,20 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: colors.lineSoft,
+    borderBottomColor: colors.line,
     backgroundColor: colors.cream,
   },
   backButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: colors.white,
+    width: 36,
+    height: 36,
+    borderRadius: radius.sm,
+    backgroundColor: colors.paper,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: colors.lineSoft,
+    borderColor: colors.line,
   },
   toggleRow: {
     flexDirection: 'row',

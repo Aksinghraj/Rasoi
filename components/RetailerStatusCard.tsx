@@ -11,7 +11,7 @@ export function RetailerLogo({ view, size = 44 }: { view: RetailerCapabilityView
       style={{
         width: size,
         height: size,
-        borderRadius: radius.md,
+        borderRadius: radius.sm,
         backgroundColor: view.accent,
         alignItems: 'center',
         justifyContent: 'center',
@@ -171,10 +171,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    backgroundColor: colors.white,
-    borderRadius: radius.md,
+    backgroundColor: colors.paper,
+    borderRadius: radius.sm,
     borderWidth: 1,
-    borderColor: colors.lineSoft,
+    borderColor: colors.line,
     padding: spacing.md,
     marginBottom: spacing.sm,
   },
@@ -183,7 +183,7 @@ const styles = StyleSheet.create({
   statusList: {
     marginTop: spacing.md,
     borderTopWidth: 1,
-    borderTopColor: colors.lineSoft,
+    borderTopColor: colors.line,
     paddingTop: spacing.sm,
   },
   statusRow: {

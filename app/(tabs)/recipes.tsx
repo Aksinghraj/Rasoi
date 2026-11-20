@@ -22,6 +22,7 @@ import {
   Button,
   Chip,
   EmptyState,
+  Eyebrow,
   Field,
   Sheet,
   Txt,
@@ -141,8 +142,11 @@ export default function RecipesScreen() {
     <View>
       <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
         <View style={{ flex: 1 }}>
-          <Txt variant="h1">Recipes</Txt>
-          <Txt variant="small" color={colors.inkSoft} style={{ marginTop: 2 }}>
+          <Eyebrow>The recipe box</Eyebrow>
+          <Txt variant="display" style={{ marginTop: 2 }}>
+            Recipes
+          </Txt>
+          <Txt variant="small" color={colors.inkSoft} style={{ marginTop: 4 }}>
             {allRecipes.length} recipes matched to your kitchen
           </Txt>
         </View>
@@ -390,20 +394,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: colors.mint,
-    borderRadius: radius.pill,
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: colors.ink,
+    borderRadius: radius.sm,
     paddingHorizontal: spacing.md,
-    height: 36,
+    height: 34,
   },
   searchWrap: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.line,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.md,
+    backgroundColor: 'transparent',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.ink,
+    paddingHorizontal: 2,
     marginTop: spacing.lg,
     marginBottom: spacing.sm,
   },
@@ -429,18 +434,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    backgroundColor: colors.mintPale,
-    borderWidth: 1,
-    borderColor: colors.mint,
-    borderRadius: radius.md,
-    padding: spacing.md,
+    backgroundColor: 'transparent',
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: colors.line,
+    paddingVertical: spacing.md,
     marginBottom: spacing.lg,
   },
   surpriseIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: colors.mint,
+    width: 30,
+    height: 30,
     alignItems: 'center',
     justifyContent: 'center',
   },
