@@ -13,7 +13,7 @@ import {
   Recipe,
   Unit,
 } from '@/lib/types';
-import { categoryLabels, categoryOrder } from '@/lib/theme';
+import { categoryLabels, categoryOrder } from '@/lib/categories';
 import { displayUnitFor, formatQuantity, fromBase, toBase } from '@/lib/engine/units';
 
 export interface MealWithRecipe {

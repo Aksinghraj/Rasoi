@@ -1,14 +1,13 @@
 import {
   DEMO_CATALOG_VERIFIED_AT,
   IngredientMatchResult,
-  Product,
   RetailerInfo,
   matchProductsForIngredient,
   products as demoProducts,
   retailerMap,
   retailers,
 } from '@/lib/data/products';
-import { ProductMatch, RetailerMode } from '@/lib/types';
+import { Product, ProductMatch, RetailerMode } from '@/lib/types';
 
 export interface ServiceabilityResult {
   serviceable: boolean | null;
@@ -299,7 +298,8 @@ class DeepLinkRetailerAdapter implements RetailerAdapter {
     return { productId, inStock: false, checkedAt: new Date().toISOString() };
   }
 
-  async getPricing() {
+  async getPricing(productId: string): Promise<{ productId: string; price: number; checkedAt: string }> {
+    void productId;
     throw new RetailerNotSupportedError(this.info.shortName, 'live pricing');
   }
 

@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "EXPO_NO_TELEMETRY=1 expo start --tunnel --port 4000",
     "build:web": "expo export --platform web",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",
@@ -45,6 +46,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
+    "@types/bun": "^1.4.5",
     "@types/react": "~19.1.10",
     "typescript": "~5.9.2"
   }

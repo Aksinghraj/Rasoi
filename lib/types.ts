@@ -335,6 +335,13 @@ export interface OrderRecord {
   items: { name: string; quantity: string; price?: number }[];
 }
 
+export interface Consents {
+  analytics: boolean;
+  personalisation: boolean;
+  offers: boolean;
+  retailerSharing: boolean;
+}
+
 export interface NotificationSettings {
   weeklyPlan: boolean;
   groceryReminder: boolean;
@@ -390,6 +397,7 @@ export interface AppData {
   cookingHistory: { recipeId: string; completedAt: string }[];
   orders: OrderRecord[];
   notifications: NotificationSettings;
+  consents: Consents;
   auditLogs: AuditEntry[];
   verifiedRecipeIds: string[];
   createdAt: string;

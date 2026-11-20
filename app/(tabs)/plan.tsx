@@ -19,7 +19,7 @@ import {
   UtensilsCrossed,
   Wand2,
 } from 'lucide-react-native';
-import { useApp } from '@/lib/store/AppContext';
+import { defaultPreferences, useApp } from '@/lib/store/AppContext';
 import {
   Badge,
   Button,
@@ -84,7 +84,7 @@ export default function PlanScreen() {
   const [notice, setNotice] = useState<string | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
-  const prefs = state.preferences!;
+  const prefs = state.preferences ?? defaultPreferences;
   const weekPlan = state.plans.find((plan) => plan.startDate === weekStart) ?? null;
   const slots = prefs.mealTypes.length ? prefs.mealTypes : mealSlotOrder;
 
@@ -108,6 +108,12 @@ export default function PlanScreen() {
   const selectedRecipe = selected ? recipeIndex.get(selected.meal.recipeId) : null;
   const budget = weekPlan ? planBudgetStatus(weekPlan, allRecipes, prefs) : null;
   const cost = weekPlan ? planCost(weekPlan, allRecipes) : null;
+  const mealCount = weekPlan
+    ? weekPlan.days.reduce(
+        (total, day) => total + Object.values(day.meals).reduce((sum, meals) => sum + meals.length, 0),
+        0,
+      )
+    : 0;
 
   const dayStats = (plan: MealPlan, date: string) => {
     const day = plan.days.find((item) => item.date === date);
@@ -310,7 +316,7 @@ export default function PlanScreen() {
             <Card style={{ marginTop: spacing.lg }}>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <View style={styles.stat}>
-                  <Txt variant="h2">{weekPlan.days.reduce((total, day) => total + slots.reduce((sum, slot) => sum + day.meals[slot].length, 0), 0)}</Txt>
+                  <Txt variant="h2">{mealCount}</Txt>
                   <Txt variant="tiny" color={colors.inkSoft}>meals planned</Txt>
                 </View>
                 <View style={styles.statDivider} />

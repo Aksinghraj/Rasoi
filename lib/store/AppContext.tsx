@@ -24,6 +24,7 @@ import {
 import {
   AppData,
   AuditEntry,
+  Consents,
   CookingSession,
   ExtraItem,
   Household,
@@ -42,6 +43,13 @@ import {
 } from '@/lib/types';
 
 const STORAGE_KEY = 'rasoi.app.v1';
+
+export const defaultConsents: Consents = {
+  analytics: false,
+  personalisation: true,
+  offers: false,
+  retailerSharing: false,
+};
 
 export const defaultNotifications: NotificationSettings = {
   weeklyPlan: true,
@@ -90,6 +98,7 @@ function createEmptyData(): AppData {
     cookingHistory: [],
     orders: [],
     notifications: defaultNotifications,
+    consents: defaultConsents,
     auditLogs: [],
     verifiedRecipeIds: [],
     createdAt: new Date().toISOString(),
@@ -118,6 +127,7 @@ interface AppContextValue {
   updateHousehold: (household: Household) => void;
   updateProfile: (patch: Partial<UserProfile>) => void;
   updateNotifications: (patch: Partial<NotificationSettings>) => void;
+  updateConsents: (patch: Partial<Consents>) => void;
   toggleFavorite: (recipeId: string) => void;
   recordView: (recipeId: string) => void;
   addPantryItem: (item: { ingredientId: string; quantity: number; unit: Unit; expiresOn?: string; staple?: boolean }) => void;
@@ -157,12 +167,29 @@ interface AppContextValue {
 
 const AppContext = createContext<AppContextValue | null>(null);
 
+function normalizePlan(plan: MealPlan): MealPlan {
+  return {
+    ...plan,
+    days: (plan.days ?? []).map((day) => ({
+      ...day,
+      meals: {
+        breakfast: day.meals?.breakfast ?? [],
+        lunch: day.meals?.lunch ?? [],
+        dinner: day.meals?.dinner ?? [],
+        snack: day.meals?.snack ?? [],
+      },
+    })),
+  };
+}
+
 function mergeStored(stored: Partial<AppData>): AppData {
   const base = createEmptyData();
   return {
     ...base,
     ...stored,
+    plans: (stored.plans ?? []).map(normalizePlan),
     notifications: { ...base.notifications, ...(stored.notifications ?? {}) },
+    consents: { ...base.consents, ...(stored.consents ?? {}) },
     auditLogs: stored.auditLogs ?? [],
     verifiedRecipeIds: stored.verifiedRecipeIds ?? [],
   };
@@ -455,6 +482,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const updateNotifications = useCallback((patch: Partial<NotificationSettings>) => {
     setState((prev) => ({ ...prev, notifications: { ...prev.notifications, ...patch } }));
+  }, []);
+
+  const updateConsents = useCallback((patch: Partial<Consents>) => {
+    setState((prev) => ({ ...prev, consents: { ...prev.consents, ...patch } }));
   }, []);
 
   const toggleFavorite = useCallback((recipeId: string) => {
@@ -840,6 +871,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     updateHousehold,
     updateProfile,
     updateNotifications,
+    updateConsents,
     toggleFavorite,
     recordView,
     addPantryItem,

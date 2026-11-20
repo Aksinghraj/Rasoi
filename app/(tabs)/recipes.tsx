@@ -16,7 +16,7 @@ import {
   X,
   Zap,
 } from 'lucide-react-native';
-import { useApp } from '@/lib/store/AppContext';
+import { defaultPreferences, useApp } from '@/lib/store/AppContext';
 import {
   Badge,
   Button,
@@ -37,7 +37,7 @@ type Sort = 'recommended' | 'time' | 'cost' | 'protein';
 export default function RecipesScreen() {
   const { state, allRecipes, toggleFavorite } = useApp();
   const router = useRouter();
-  const prefs = state.preferences!;
+  const prefs = state.preferences ?? defaultPreferences;
   const [query, setQuery] = useState('');
   const [mealType, setMealType] = useState<MealSlot | 'all'>('all');
   const [mode, setMode] = useState<Mode>('foryou');

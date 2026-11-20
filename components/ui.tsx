@@ -6,6 +6,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleProp,
   StyleSheet,
@@ -86,7 +87,7 @@ export function Screen({
   padded?: boolean;
   background?: string;
   edges?: ('top' | 'bottom' | 'left' | 'right')[];
-  refreshControl?: React.ReactElement;
+  refreshControl?: React.ReactElement<React.ComponentProps<typeof RefreshControl>>;
 }) {
   const content = padded ? { padding: spacing.xl } : undefined;
   return (

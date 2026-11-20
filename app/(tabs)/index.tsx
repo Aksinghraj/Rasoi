@@ -20,7 +20,7 @@ import {
   UtensilsCrossed,
   Wallet,
 } from 'lucide-react-native';
-import { useApp } from '@/lib/store/AppContext';
+import { defaultPreferences, useApp } from '@/lib/store/AppContext';
 import {
   Avatar,
   Badge,
@@ -58,8 +58,8 @@ export default function HomeScreen() {
   } = useApp();
   const router = useRouter();
   const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const prefs = state.preferences!;
-  const household = state.household!;
+  const prefs = state.preferences ?? defaultPreferences;
+  const household = state.household ?? { adults: 2, children: 0, defaultServings: 2, members: [] };
   const today = todayISO();
   const firstName = (state.user?.name ?? 'there').split(' ')[0];
   const todayPlan = activePlan?.days.find((day) => day.date === today);

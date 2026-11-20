@@ -21,7 +21,7 @@ import {
   Users,
   Wallet,
 } from 'lucide-react-native';
-import { useApp } from '@/lib/store/AppContext';
+import { defaultPreferences, useApp } from '@/lib/store/AppContext';
 import {
   Avatar,
   Badge,
@@ -37,8 +37,8 @@ import {
   ToggleRow,
 } from '@/components/ui';
 import { colors, dietLabels, equipmentLabels, radius, spacing } from '@/lib/theme';
-import { formatDay, formatINR, relativeTime, weekLabel } from '@/lib/format';
-import { planCost } from '@/lib/engine/planner';
+import { formatDay, formatINR, relativeTime } from '@/lib/format';
+import { planCost, weekLabel } from '@/lib/engine/planner';
 
 export default function ProfileScreen() {
   const {
@@ -69,8 +69,8 @@ export default function ProfileScreen() {
   const [deleteConfirm, setDeleteConfirm] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
 
-  const prefs = state.preferences!;
-  const household = state.household!;
+  const prefs = state.preferences ?? defaultPreferences;
+  const household = state.household ?? { adults: 2, children: 0, defaultServings: 2, members: [] };
   const favorites = state.favorites.filter((id) => allRecipes.some((recipe) => recipe.id === id)).length;
   const planSpend = useMemo(
     () => (activePlan ? planCost(activePlan, allRecipes).total : 0),
