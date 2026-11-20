@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AppState } from 'react-native';
 import React, {
   createContext,
   useCallback,
@@ -9,8 +10,13 @@ import React, {
   useState,
 } from 'react';
 import { recipes as curatedRecipes } from '@/lib/data/recipes';
-import { createDemoUser, createSelfServiceUser } from '@/lib/auth/users';
-import { addDays, startOfWeek, toISODate, uid } from '@/lib/format';
+import {
+  createDemoUser,
+  createSelfServiceUser,
+  matchesExistingAccount,
+  sanitizeProfilePatch,
+} from '@/lib/auth/users';
+import { addDays, isValidISODate, startOfWeek, toISODate, uid } from '@/lib/format';
 import {
   addMealToPlan,
   copyDay as copyDayInPlan,

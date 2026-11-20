@@ -12,6 +12,50 @@ import { UserProfile } from '@/lib/types';
 
 export type SelfServiceChannel = 'phone' | 'email';
 
+function normalizePhone(value: string): string {
+  return value.replace(/\D/g, '').slice(-10);
+}
+
+function normalizeEmail(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+/**
+ * A self-service sign-in may only resume an account created through the same
+ * self-service channel. The seeded demo admin must never be resumed by an OTP
+ * sign-in: that would hand admin rights to anyone entering the demo number.
+ */
+export function matchesExistingAccount(
+  user: UserProfile | null | undefined,
+  channel: SelfServiceChannel,
+  identifier: string,
+): boolean {
+  if (!user || user.authMethod !== channel) return false;
+  if (channel === 'phone') return Boolean(user.phone) && user.phone === normalizePhone(identifier);
+  return Boolean(user.email) && normalizeEmail(user.email as string) === normalizeEmail(identifier);
+}
+
+/**
+ * Only presentation fields can be changed from the client. Identity, auth
+ * method and role are owned by the account store and are never taken from a
+ * caller-supplied patch.
+ */
+export function sanitizeProfilePatch(user: UserProfile, patch: Partial<UserProfile>): UserProfile {
+  const next: UserProfile = { ...user, isAdmin: user.isAdmin === true };
+  if (typeof patch.name === 'string' && patch.name.trim().length >= 2) {
+    next.name = patch.name.trim().slice(0, 60);
+  }
+  if (typeof patch.phone === 'string') {
+    const phone = normalizePhone(patch.phone);
+    if (/^[6-9][0-9]{9}$/.test(phone)) next.phone = phone;
+  }
+  if (typeof patch.email === 'string') {
+    const email = normalizeEmail(patch.email);
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) next.email = email;
+  }
+  return next;
+}
+
 export function createSelfServiceUser(
   channel: SelfServiceChannel,
   identifier: string,
