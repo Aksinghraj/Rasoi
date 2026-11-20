@@ -27,7 +27,6 @@ import {
   Chip,
   Divider,
   EmptyState,
-  Eyebrow,
   Field,
   FoodImage,
   InfoBanner,
@@ -221,11 +220,9 @@ export default function PlanScreen() {
       <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: spacing.xxxl }} showsVerticalScrollIndicator={false}>
         <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
           <View style={{ flex: 1 }}>
-            <Eyebrow>Your week</Eyebrow>
-            <Txt variant="display" style={{ marginTop: 2 }}>
-              Meal plan
-            </Txt>
-            <Txt variant="small" color={colors.inkSoft} style={{ marginTop: 4 }}>
+            <Txt variant="tiny" color={colors.orange} style={{ fontWeight: '800', letterSpacing: 1.5, marginBottom: 5 }}>YOUR KITCHEN, IN RHYTHM</Txt>
+            <Txt variant="h1">Meal plan</Txt>
+            <Txt variant="small" color={colors.inkSoft} style={{ marginTop: 2 }}>
               Seven days, one smart grocery list
             </Txt>
           </View>
@@ -256,6 +253,28 @@ export default function PlanScreen() {
             <ChevronRight size={18} color={colors.forest} />
           </Pressable>
         </View>
+
+        {weekPlan ? (
+          <View style={{ marginTop: spacing.lg, paddingVertical: spacing.md, borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.lineSoft }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm }}>
+              <Txt variant="tiny" color={colors.inkFaint} style={{ fontWeight: '800', letterSpacing: 1 }}>YOUR WEEK AT A GLANCE</Txt>
+              <Txt variant="tiny" color={colors.forest} style={{ fontWeight: '700' }}>{mealCount} planned</Txt>
+            </View>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 5 }}>
+              {weekPlan.days.map((day) => {
+                const count = Object.values(day.meals).reduce((sum, meals) => sum + meals.length, 0);
+                const today = day.date === todayISO();
+                return (
+                  <View key={day.date} style={{ flex: 1, alignItems: 'center', paddingVertical: 8, backgroundColor: today ? colors.forest : colors.white, borderWidth: 1, borderColor: today ? colors.forest : colors.lineSoft, borderRadius: radius.sm }}>
+                    <Txt variant="tiny" color={today ? colors.white : colors.inkFaint} style={{ fontWeight: '700' }}>{formatDay(day.date).split(' ')[0].slice(0, 2).toUpperCase()}</Txt>
+                    <Txt variant="bodyStrong" color={today ? colors.white : colors.ink} style={{ marginTop: 2 }}>{formatDay(day.date).split(' ')[1] ?? ''}</Txt>
+                    <View style={{ width: 5, height: 5, borderRadius: 3, marginTop: 5, backgroundColor: count ? (today ? colors.mintStrong : colors.orange) : (today ? colors.inkFaint : colors.line) }} />
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        ) : null}
 
         <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm }}>
           <Chip
@@ -318,8 +337,7 @@ export default function PlanScreen() {
         ) : (
           <>
             <Card style={{ marginTop: spacing.lg }}>
-              <Eyebrow>This week at a glance</Eyebrow>
-              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: spacing.sm }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <View style={styles.stat}>
                   <Txt variant="h2">{mealCount}</Txt>
                   <Txt variant="tiny" color={colors.inkSoft}>meals planned</Txt>
@@ -351,7 +369,7 @@ export default function PlanScreen() {
               const stats = dayStats(weekPlan, day.date);
               const isToday = day.date === todayISO();
               return (
-                <Card key={day.date} padded={false} style={{ marginTop: spacing.lg, overflow: 'hidden', borderRadius: radius.sm }}>
+                <Card key={day.date} padded={false} style={{ marginTop: spacing.lg, overflow: 'hidden' }}>
                   <View style={[styles.dayHeader, isToday && { backgroundColor: colors.mintPale }]}>
                     <View style={[styles.dateBadge, isToday && { backgroundColor: colors.forest }]}>
                       <Txt variant="tiny" color={isToday ? colors.mintStrong : colors.inkFaint} style={{ fontWeight: '700' }}>
@@ -750,10 +768,10 @@ const styles = StyleSheet.create({
   weekNav: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.white,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.lineSoft,
+    backgroundColor: colors.creamDeep,
+    borderRadius: radius.md,
+    borderWidth: 0,
+    borderColor: 'transparent',
     padding: spacing.sm,
     marginTop: spacing.lg,
   },
@@ -773,27 +791,20 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     padding: spacing.md,
     paddingHorizontal: spacing.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.lineSoft,
   },
   dateBadge: {
-    width: 44,
-    height: 50,
-    borderRadius: 0,
-    borderLeftWidth: 2,
-    borderLeftColor: colors.terracotta,
-    backgroundColor: 'transparent',
-    alignItems: 'flex-start',
+    width: 48,
+    height: 56,
+    borderRadius: radius.sm,
+    backgroundColor: colors.mintPale,
+    alignItems: 'center',
     justifyContent: 'center',
-    paddingLeft: 8,
   },
   dayAction: {
-    width: 30,
-    height: 30,
-    borderRadius: radius.sm,
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: colors.line,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.mintPale,
     alignItems: 'center',
     justifyContent: 'center',
   },

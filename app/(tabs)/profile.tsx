@@ -29,7 +29,6 @@ import {
   Card,
   Chip,
   Divider,
-  Eyebrow,
   Field,
   InfoBanner,
   Sheet,
@@ -98,10 +97,10 @@ export default function ProfileScreen() {
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.cream }} edges={['top']}>
       <ScrollView contentContainerStyle={{ paddingBottom: spacing.xxxl }} showsVerticalScrollIndicator={false}>
         <View style={styles.hero}>
+          <Txt variant="tiny" color={colors.mintStrong} style={{ fontWeight: '800', letterSpacing: 1.5, marginBottom: spacing.md }}>YOUR RASOI KITCHEN</Txt>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
             <Avatar name={state.user?.name ?? 'Rasoi'} size={56} />
             <View style={{ flex: 1 }}>
-              <Eyebrow color={colors.mintStrong}>Your kitchen</Eyebrow>
               <Txt variant="h2" color={colors.white} numberOfLines={1}>
                 {state.user?.name ?? 'Rasoi cook'}
               </Txt>
@@ -615,9 +614,9 @@ function MenuRow({
 
 const styles = StyleSheet.create({
   hero: {
-    backgroundColor: colors.forest,
+    backgroundColor: colors.forestDeep,
     paddingHorizontal: spacing.xl,
-    paddingTop: spacing.md,
+    paddingTop: spacing.lg,
     paddingBottom: spacing.xxxl,
   },
   editButton: {

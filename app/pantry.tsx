@@ -152,6 +152,18 @@ export default function PantryScreen() {
         }
       />
       <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: spacing.xxxl }} showsVerticalScrollIndicator={false}>
+        <View style={{ marginBottom: spacing.lg, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.lineSoft }}>
+          <Txt variant="tiny" color={colors.orange} style={{ fontWeight: '800', letterSpacing: 1.4 }}>INSIDE YOUR KITCHEN</Txt>
+          <Txt variant="h1" style={{ fontSize: 29, marginTop: 4 }}>Make what you have count.</Txt>
+          <Txt variant="small" color={colors.inkSoft} style={{ marginTop: 5, maxWidth: 310 }}>
+            Keep a simple inventory so meal ideas and shopping lists start with what is already at home.
+          </Txt>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.md }}>
+            <View style={{ flex: 1, height: 1, backgroundColor: colors.line }} />
+            <Txt variant="tiny" color={colors.inkFaint}>{state.pantry.length} INGREDIENTS TRACKED</Txt>
+            <View style={{ flex: 1, height: 1, backgroundColor: colors.line }} />
+          </View>
+        </View>
         <Card>
           <ToggleRow
             title="Auto-deduct from grocery list"
@@ -362,16 +374,15 @@ const styles = StyleSheet.create({
   statsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'transparent',
-    borderRadius: 0,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: colors.line,
-    paddingVertical: spacing.lg,
+    backgroundColor: colors.creamDeep,
+    borderRadius: radius.md,
+    borderWidth: 0,
+    borderColor: 'transparent',
+    padding: spacing.lg,
     marginTop: spacing.md,
   },
   stat: { flex: 1, alignItems: 'center' },
-  statDivider: { width: 1, height: 30, backgroundColor: colors.line },
+  statDivider: { width: 1, height: 30, backgroundColor: colors.lineSoft },
   row: {
     flexDirection: 'row',
     alignItems: 'center',

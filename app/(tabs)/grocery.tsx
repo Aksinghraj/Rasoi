@@ -35,7 +35,6 @@ import {
   Divider,
   EmptyState,
   ErrorState,
-  Eyebrow,
   Field,
   InfoBanner,
   ProgressBar,
@@ -153,11 +152,9 @@ export default function GroceryScreen() {
       <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: spacing.xxxl }} showsVerticalScrollIndicator={false}>
         <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
           <View style={{ flex: 1 }}>
-            <Eyebrow>The shopping list</Eyebrow>
-            <Txt variant="display" style={{ marginTop: 2 }}>
-              Grocery list
-            </Txt>
-            <Txt variant="small" color={colors.inkSoft} style={{ marginTop: 4 }}>
+            <Txt variant="tiny" color={colors.orange} style={{ fontWeight: '800', letterSpacing: 1.5, marginBottom: 5 }}>FROM YOUR MEAL PLAN</Txt>
+            <Txt variant="h1">Grocery list</Txt>
+            <Txt variant="small" color={colors.inkSoft} style={{ marginTop: 2 }}>
               {activePlan ? activePlan.name : 'No plan yet'}
             </Txt>
           </View>
@@ -208,11 +205,13 @@ export default function GroceryScreen() {
           </View>
         ) : grocery ? (
           <>
-            <Card style={{ marginTop: spacing.lg }}>
+            <Card style={{ marginTop: spacing.lg, backgroundColor: colors.creamDeep, borderWidth: 0 }}>
               <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
                 <View style={{ flex: 1 }}>
-                  <Eyebrow>Estimated basket</Eyebrow>
-                  <Txt variant="display" style={{ fontSize: 34 }}>
+                  <Txt variant="tiny" color={colors.inkFaint} style={{ fontWeight: '700' }}>
+                    ESTIMATED BASKET
+                  </Txt>
+                  <Txt variant="display" style={{ fontSize: 30 }}>
                     {formatINR(grocery.totals.estimated)}
                   </Txt>
                   <Txt variant="tiny" color={colors.inkSoft}>
@@ -300,7 +299,7 @@ export default function GroceryScreen() {
 
             {grocery.sections.map((section) => (
               <View key={section.category}>
-                <SectionHeader eyebrow="Aisle" title={section.title} subtitle={`${section.lines.length} items`} />
+                <SectionHeader title={section.title} subtitle={`${section.lines.length} items`} />
                 <Card padded={false}>
                   {section.lines.map((line, index) => (
                     <View key={line.key}>
@@ -354,7 +353,7 @@ export default function GroceryScreen() {
 
             {grocery.extras.length > 0 ? (
               <>
-                <SectionHeader eyebrow="Your additions" title="Added by you" subtitle={`${grocery.extras.length} items`} />
+                <SectionHeader title="Added by you" subtitle={`${grocery.extras.length} items`} />
                 <Card padded={false}>
                   {grocery.extras.map((extra, index) => (
                     <View key={extra.key}>
@@ -654,7 +653,7 @@ const styles = StyleSheet.create({
   checkbox: {
     width: 22,
     height: 22,
-    borderRadius: 6,
+    borderRadius: 3,
     borderWidth: 1.5,
     borderColor: colors.line,
     alignItems: 'center',

@@ -6,9 +6,11 @@ import {
   ArrowRight,
   Bell,
   CalendarDays,
+  ChefHat,
   ChevronRight,
   Clock,
   Flame,
+  Leaf,
   Package,
   Play,
   Plus,
@@ -25,10 +27,8 @@ import {
   Button,
   Card,
   Divider,
-  Eyebrow,
   FoodImage,
   ProgressBar,
-  Rule,
   SectionHeader,
   Sheet,
   Txt,
@@ -125,8 +125,10 @@ export default function HomeScreen() {
         <View style={styles.header}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
             <View style={{ flex: 1 }}>
-              <Eyebrow>{formatDay(today, 'long')}</Eyebrow>
-              <Txt variant="display" style={{ marginTop: 4 }}>
+              <Txt variant="tiny" color={colors.inkFaint} style={{ fontWeight: '700' }}>
+                {formatDay(today, 'long').toUpperCase()}
+              </Txt>
+              <Txt variant="h1" style={{ marginTop: 2 }}>
                 {greeting()}, {firstName}
               </Txt>
             </View>
@@ -135,25 +137,32 @@ export default function HomeScreen() {
               style={styles.iconButton}
               accessibilityLabel="Notification settings"
             >
-              <Bell size={18} color={colors.ink} />
+              <Bell size={19} color={colors.ink} />
               {state.notifications.weeklyPlan ? <View style={styles.bellDot} /> : null}
             </Pressable>
             <Pressable onPress={() => router.push('/(tabs)/profile')} accessibilityLabel="Open profile">
-              <Avatar name={state.user?.name ?? 'Rasoi'} size={40} />
+              <Avatar name={state.user?.name ?? 'Rasoi'} size={42} />
             </Pressable>
           </View>
-          <View style={styles.metaLine}>
-            <Txt variant="tiny" color={colors.inkSoft}>
-              {household.defaultServings} servings
-            </Txt>
-            <View style={styles.dot} />
-            <Txt variant="tiny" color={colors.inkSoft} style={{ textTransform: 'capitalize' }}>
-              {prefs.diet.replace(/_/g, ' ')}
-            </Txt>
-            <View style={styles.dot} />
-            <Txt variant="tiny" color={colors.inkSoft} numberOfLines={1} style={{ flexShrink: 1 }}>
-              {prefs.locality || prefs.city}
-            </Txt>
+          <View style={styles.chipRow}>
+            <View style={styles.contextChip}>
+              <ChefHat size={12} color={colors.forest} />
+              <Txt variant="tiny" color={colors.forest} style={{ fontWeight: '600' }}>
+                {household.defaultServings} servings
+              </Txt>
+            </View>
+            <View style={styles.contextChip}>
+              <Leaf size={12} color={colors.forest} />
+              <Txt variant="tiny" color={colors.forest} style={{ fontWeight: '600' }}>
+                {prefs.diet.replace(/_/g, ' ')}
+              </Txt>
+            </View>
+            <View style={styles.contextChip}>
+              <Package size={12} color={colors.forest} />
+              <Txt variant="tiny" color={colors.forest} style={{ fontWeight: '600' }} numberOfLines={1}>
+                {prefs.locality || prefs.city}
+              </Txt>
+            </View>
           </View>
         </View>
 
@@ -196,9 +205,13 @@ export default function HomeScreen() {
           ) : null}
 
           <View style={{ marginTop: continueCooking ? spacing.lg : 0 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm }}>
+              <View style={{ width: 22, height: 2, backgroundColor: colors.orange }} />
+              <Txt variant="tiny" color={colors.inkFaint} style={{ fontWeight: '800', letterSpacing: 1.2 }}>TODAY AT YOUR TABLE</Txt>
+            </View>
             {dinnerRecipe && dinnerMeal ? (
               <Card padded={false} style={{ overflow: 'hidden' }}>
-                <FoodImage uri={dinnerRecipe.image} height={186} borderRadius={0}>
+                <FoodImage uri={dinnerRecipe.image} height={218} borderRadius={0}>
                   <View style={styles.heroTop}>
                     <View style={styles.heroBadge}>
                       <Txt variant="tiny" color={colors.forest} style={{ fontWeight: '800' }}>
@@ -272,23 +285,23 @@ export default function HomeScreen() {
             )}
           </View>
 
+          <View style={{ marginTop: spacing.xl, marginBottom: spacing.sm, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Txt variant="tiny" color={colors.inkFaint} style={{ fontWeight: '800', letterSpacing: 1.1 }}>YOUR KITCHEN SHORTCUTS</Txt>
+            <Txt variant="tiny" color={colors.inkFaint}>PLAN · SHOP · COOK</Txt>
+          </View>
           <View style={styles.quickRow}>
             {[
               { label: 'Plan', sub: '7 days', icon: CalendarDays, href: '/(tabs)/plan' as const },
               { label: 'Recipes', sub: 'Discover', icon: UtensilsCrossed, href: '/(tabs)/recipes' as const },
               { label: 'Grocery', sub: 'Smart list', icon: ShoppingBasket, href: '/(tabs)/grocery' as const },
               { label: 'Pantry', sub: 'At home', icon: Package, href: '/pantry' as const },
-            ].map((action, index) => {
+            ].map((action) => {
               const Icon = action.icon;
               return (
                 <Pressable
                   key={action.label}
                   onPress={() => router.push(action.href)}
-                  style={({ pressed }) => [
-                    styles.quickTile,
-                    index === 3 && { borderRightWidth: 0 },
-                    pressed && { opacity: 0.7 },
-                  ]}
+                  style={({ pressed }) => [styles.quickTile, pressed && { opacity: 0.8 }]}
                 >
                   <View style={styles.quickIcon}>
                     <Icon size={18} color={colors.forest} />
@@ -351,7 +364,6 @@ export default function HomeScreen() {
           </Card>
 
           <SectionHeader
-            eyebrow="At the table"
             title="Today’s menu"
             actionLabel="Open planner"
             onAction={() => router.push('/(tabs)/plan')}
@@ -411,7 +423,6 @@ export default function HomeScreen() {
           </Card>
 
           <SectionHeader
-            eyebrow="For your kitchen"
             title="Picked for you"
             subtitle="Personalised to your household and pantry"
             actionLabel="See all"
@@ -586,18 +597,20 @@ const styles = StyleSheet.create({
   header: {
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.md,
-    paddingBottom: spacing.lg,
+    paddingBottom: spacing.xl,
     backgroundColor: colors.cream,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.lineSoft,
   },
   iconButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: colors.paper,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.white,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: colors.line,
+    borderColor: colors.lineSoft,
   },
   bellDot: {
     position: 'absolute',
@@ -611,13 +624,6 @@ const styles = StyleSheet.create({
     borderColor: colors.white,
   },
   chipRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md, flexWrap: 'wrap' },
-  metaLine: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    marginTop: spacing.md,
-    flexWrap: 'wrap',
-  },
   contextChip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -667,24 +673,22 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
   },
   dot: { width: 3, height: 3, borderRadius: 2, backgroundColor: colors.inkFaint },
-  quickRow: {
-    flexDirection: 'row',
-    marginTop: spacing.lg,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: colors.line,
-  },
+  quickRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.lg },
   quickTile: {
-    flex: 1,
+    width: '48%',
+    backgroundColor: colors.white,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.lineSoft,
     paddingVertical: spacing.md,
-    paddingHorizontal: 10,
+    paddingHorizontal: spacing.md,
     alignItems: 'flex-start',
-    borderRightWidth: 1,
-    borderRightColor: colors.lineSoft,
   },
   quickIcon: {
-    width: 26,
-    height: 26,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.mintPale,
     alignItems: 'center',
     justifyContent: 'center',
   },

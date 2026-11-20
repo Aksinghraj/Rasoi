@@ -218,8 +218,13 @@ export default function CheckoutScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.cream }} edges={['top']}>
-      <ScreenHeader title={view.shortName} subtitle={`${view.modeLabel} · no live retailer API`} onBack={() => router.back()} />
+      <ScreenHeader title={view.shortName} subtitle={`${view.modeLabel} · retailer controls final prices and availability`} onBack={() => router.back()} />
       <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: spacing.xxxl }} showsVerticalScrollIndicator={false}>
+        <View style={{ marginBottom: spacing.sm }}>
+          <Txt variant="tiny" color={colors.orange} style={{ fontWeight: '800', letterSpacing: 1.4, marginBottom: 5 }}>YOUR SHOPPING HAND-OFF</Txt>
+          <Txt variant="h2">Review what you need</Txt>
+          <Txt variant="small" color={colors.inkSoft} style={{ marginTop: 3 }}>Rasoi prepares the list. The retailer app confirms serviceability, stock and final prices.</Txt>
+        </View>
         <RetailerStatusCard
           view={view}
           estimate={retailerMatches && matchedCount > 0 ? estimateTotal : null}

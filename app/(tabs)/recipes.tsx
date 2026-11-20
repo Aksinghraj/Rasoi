@@ -22,7 +22,6 @@ import {
   Button,
   Chip,
   EmptyState,
-  Eyebrow,
   Field,
   Sheet,
   Txt,
@@ -142,11 +141,9 @@ export default function RecipesScreen() {
     <View>
       <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
         <View style={{ flex: 1 }}>
-          <Eyebrow>The recipe box</Eyebrow>
-          <Txt variant="display" style={{ marginTop: 2 }}>
-            Recipes
-          </Txt>
-          <Txt variant="small" color={colors.inkSoft} style={{ marginTop: 4 }}>
+          <Txt variant="tiny" color={colors.orange} style={{ fontWeight: '800', letterSpacing: 1.5, marginBottom: 5 }}>THE RECIPE COLLECTION</Txt>
+          <Txt variant="h1">Find something lovely to cook.</Txt>
+          <Txt variant="small" color={colors.inkSoft} style={{ marginTop: 2 }}>
             {allRecipes.length} recipes matched to your kitchen
           </Txt>
         </View>
@@ -162,7 +159,7 @@ export default function RecipesScreen() {
         </Pressable>
       </View>
 
-      <View style={styles.searchWrap}>
+      <View style={[styles.searchWrap, { borderRadius: radius.md, minHeight: 52, marginTop: spacing.lg }]}>
         <Search size={18} color={colors.inkFaint} />
         <Field
           placeholder="Search dishes, cuisines or ingredients"
@@ -178,6 +175,9 @@ export default function RecipesScreen() {
         ) : null}
       </View>
 
+      <Txt variant="tiny" color={colors.inkFaint} style={{ fontWeight: '800', letterSpacing: 1, marginTop: spacing.md }}>
+        BROWSE BY MEAL
+      </Txt>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: spacing.sm }}>
         <Chip label="All meals" selected={mealType === 'all'} onPress={() => setMealType('all')} />
         {(['breakfast', 'lunch', 'dinner', 'snack'] as MealSlot[]).map((slot) => (
@@ -190,7 +190,10 @@ export default function RecipesScreen() {
         ))}
       </ScrollView>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: spacing.sm }}>
+      <Txt variant="tiny" color={colors.inkFaint} style={{ fontWeight: '800', letterSpacing: 1, marginTop: spacing.xs }}>
+        YOUR SHORTCUTS
+      </Txt>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: spacing.sm }}>
         {modes.map((item) => {
           const Icon = item.icon;
           return (
@@ -394,21 +397,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: colors.ink,
-    borderRadius: radius.sm,
+    backgroundColor: colors.mint,
+    borderRadius: radius.pill,
     paddingHorizontal: spacing.md,
-    height: 34,
+    height: 36,
   },
   searchWrap: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    backgroundColor: 'transparent',
-    borderBottomWidth: 1,
-    borderBottomColor: colors.ink,
-    paddingHorizontal: 2,
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
     marginTop: spacing.lg,
     marginBottom: spacing.sm,
   },
@@ -434,16 +436,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    backgroundColor: 'transparent',
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: colors.line,
-    paddingVertical: spacing.md,
+    backgroundColor: colors.creamDeep,
+    borderWidth: 0,
+    borderColor: 'transparent',
+    borderRadius: radius.sm,
+    padding: spacing.md,
     marginBottom: spacing.lg,
   },
   surpriseIcon: {
-    width: 30,
-    height: 30,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.mint,
     alignItems: 'center',
     justifyContent: 'center',
   },

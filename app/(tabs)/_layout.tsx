@@ -10,14 +10,14 @@ export default function TabLayout() {
         tabBarActiveTintColor: colors.forest,
         tabBarInactiveTintColor: colors.inkFaint,
         tabBarStyle: {
-          backgroundColor: colors.paper,
-          borderTopColor: colors.line,
+          backgroundColor: colors.white,
+          borderTopColor: colors.lineSoft,
           borderTopWidth: 1,
-          height: 68,
-          paddingTop: 8,
-          paddingBottom: 10,
+          height: 66,
+          paddingTop: 6,
+          paddingBottom: 8,
         },
-        tabBarLabelStyle: { fontSize: 9.5, fontWeight: '700', letterSpacing: 0.7, textTransform: 'uppercase' },
+        tabBarLabelStyle: { fontSize: 10, fontWeight: '700', letterSpacing: 0.2 },
         tabBarItemStyle: { paddingVertical: 2 },
       }}
     >

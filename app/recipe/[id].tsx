@@ -22,7 +22,6 @@ import {
   Card,
   Divider,
   EmptyState,
-  Eyebrow,
   FoodImage,
   InfoBanner,
   ScreenHeader,
@@ -113,7 +112,7 @@ export default function RecipeDetailScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.cream }} edges={['top']}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: spacing.xxxl }}>
-        <FoodImage uri={recipe.image} height={260} borderRadius={0}>
+        <FoodImage uri={recipe.image} height={310} borderRadius={0}>
           <View style={styles.heroTop}>
             <Pressable onPress={() => router.back()} style={styles.heroButton} accessibilityLabel="Go back">
               <ChevronLeft size={22} color={colors.ink} />
@@ -138,11 +137,14 @@ export default function RecipeDetailScreen() {
         </FoodImage>
 
         <View style={{ padding: spacing.xl }}>
+          <Txt variant="tiny" color={colors.orange} style={{ fontWeight: '800', letterSpacing: 1.5, marginBottom: spacing.sm }}>COOK SOMETHING GOOD</Txt>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             <DietMark foodType={recipe.foodType} size={15} />
-            <Eyebrow>{recipe.cuisine} · {recipe.region}</Eyebrow>
+            <Txt variant="tiny" color={colors.orange} style={{ fontWeight: '800', textTransform: 'uppercase' }}>
+              {recipe.cuisine} · {recipe.region}
+            </Txt>
           </View>
-          <Txt variant="display" style={{ marginTop: 6 }}>
+          <Txt variant="h1" style={{ marginTop: 4 }}>
             {recipe.name}
           </Txt>
           <Txt variant="small" color={colors.inkSoft} style={{ marginTop: 6 }}>
@@ -194,10 +196,17 @@ export default function RecipeDetailScreen() {
             </View>
           ) : null}
 
-          <Card style={{ marginTop: spacing.lg }}>
+          <View style={{ marginTop: spacing.xl, marginBottom: spacing.sm, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <View style={{ flex: 1 }}>
+              <Txt variant="tiny" color={colors.orange} style={{ fontWeight: '800', letterSpacing: 1.2 }}>GET EVERYTHING READY</Txt>
+              <Txt variant="h2" style={{ marginTop: 3 }}>Ingredients</Txt>
+            </View>
+            <Txt variant="tiny" color={colors.inkFaint}>STEP 1 OF 2</Txt>
+          </View>
+          <Card style={{ marginTop: 0 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
               <View>
-                <Txt variant="h3">Ingredients</Txt>
+                <Txt variant="bodyStrong">Adjust your servings</Txt>
                 <Txt variant="tiny" color={colors.inkSoft}>
                   Scaled for {servings} {servings === 1 ? 'serving' : 'servings'}
                 </Txt>
@@ -418,8 +427,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     alignSelf: 'flex-start',
-    backgroundColor: colors.mintPale,
-    borderRadius: radius.pill,
+    backgroundColor: colors.creamDeep,
+    borderRadius: radius.sm,
     paddingHorizontal: 8,
     paddingVertical: 3,
     marginTop: 6,

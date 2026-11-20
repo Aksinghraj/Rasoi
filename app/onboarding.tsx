@@ -28,7 +28,6 @@ import { useApp } from '@/lib/store/AppContext';
 import {
   Button,
   Chip,
-  Eyebrow,
   Field,
   InfoBanner,
   ProgressBar,
@@ -265,7 +264,9 @@ export default function OnboardingScreen() {
               </View>
             )}
             <View style={{ flex: 1 }}>
-              <Eyebrow>Step {step + 1} of {STEPS.length}</Eyebrow>
+              <Txt variant="tiny" color={colors.inkFaint} style={{ fontWeight: '700' }}>
+                STEP {step + 1} OF {STEPS.length}
+              </Txt>
               <Txt variant="h3" numberOfLines={1}>
                 {current.title}
               </Txt>
@@ -765,7 +766,7 @@ const styles = StyleSheet.create({
     paddingTop: spacing.sm,
     paddingBottom: spacing.md,
     backgroundColor: colors.cream,
-    borderBottomWidth: 1,
+    borderBottomWidth: 0,
     borderBottomColor: colors.lineSoft,
   },
   back: {
@@ -801,7 +802,7 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     borderWidth: 1,
     borderColor: colors.line,
-    borderRadius: radius.md,
+    borderRadius: radius.sm,
     backgroundColor: colors.white,
     marginBottom: spacing.sm,
   },
