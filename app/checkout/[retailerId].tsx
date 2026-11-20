@@ -24,7 +24,7 @@ import {
   Txt,
 } from '@/components/ui';
 import { RetailerStatusCard } from '@/components/RetailerStatusCard';
-import { colors, radius, spacing } from '@/lib/theme';
+import { colors, spacing } from '@/lib/theme';
 import { formatINR, uid } from '@/lib/format';
 import { buildGroceryList, shoppingListText } from '@/lib/engine/grocery';
 import { formatQuantity } from '@/lib/engine/units';
@@ -43,7 +43,9 @@ import { OrderRecord } from '@/lib/types';
 
 const opener: LinkOpener = {
   canOpen: (url) => Linking.canOpenURL(url),
-  open: (url) => Linking.openURL(url),
+  open: async (url) => {
+    await Linking.openURL(url);
+  },
 };
 
 export default function CheckoutScreen() {
@@ -215,7 +217,7 @@ export default function CheckoutScreen() {
           estimate={grocery?.totals.estimated ?? null}
           matchedLines={grocery?.totals.matchedCount}
           totalLines={grocery?.totals.lineCount}
-          onOpen={buyLines.length > 0 ? () => handOff(buyLines[0]?.name ?? '') : undefined}
+          onOpen={!isSandbox && buyLines.length > 0 ? () => handOff(buyLines[0]?.name ?? '') : undefined}
           opening={busy}
         />
 

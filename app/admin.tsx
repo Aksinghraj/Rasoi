@@ -19,6 +19,7 @@ import { formatINR, relativeTime } from '@/lib/format';
 import { buildGroceryList } from '@/lib/engine/grocery';
 import { ingredients } from '@/lib/data/ingredients';
 import { products, retailers } from '@/lib/data/products';
+import { getRetailerCapabilityView } from '@/lib/retailers/adapters';
 import { IngredientCategory } from '@/lib/types';
 
 type Tab = 'overview' | 'recipes' | 'ingredients' | 'retailers' | 'audit';
@@ -226,26 +227,30 @@ export default function AdminScreen() {
               Retailer integrations
             </Txt>
             {retailers.map((retailer) => {
+              const view = getRetailerCapabilityView(retailer.id);
               const catalogue = products.filter((product) => product.retailerId === retailer.id).length;
               return (
                 <Card key={retailer.id} style={{ marginBottom: spacing.sm }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-                    <View style={[styles.dot, { backgroundColor: retailer.accent }]} />
+                    <View style={[styles.dot, { backgroundColor: view.accent }]} />
                     <Txt variant="bodyStrong" style={{ flex: 1 }}>
-                      {retailer.name}
+                      {view.name}
                     </Txt>
                     <Badge
-                      label={retailer.status === 'sandbox' ? 'Sandbox' : 'Deep link'}
-                      tone={retailer.status === 'sandbox' ? 'mint' : 'neutral'}
+                      label={view.modeLabel}
+                      tone={view.status === 'sandbox' ? 'mint' : 'neutral'}
                     />
                   </View>
                   <Txt variant="tiny" color={colors.inkSoft} style={{ marginTop: 4 }}>
-                    {retailer.description}
+                    {view.description}
                   </Txt>
                   <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm, flexWrap: 'wrap' }}>
-                    <Badge label={`Mode ${retailer.mode}`} tone="blue" />
+                    <Badge label={`Mode ${view.mode}`} tone="blue" />
                     <Badge label={`${catalogue} demo SKUs`} tone="neutral" />
-                    <Badge label={retailer.eta} tone="neutral" />
+                    <Badge label={view.deepLink ? 'Deep link ready' : 'No deep link'} tone="neutral" />
+                    <Badge label={view.sandboxCart ? 'Sandbox cart' : 'No cart API'} tone={view.sandboxCart ? 'mint' : 'neutral'} />
+                    <Badge label="Live price: no" tone="orange" />
+                    <Badge label="Live stock: no" tone="orange" />
                   </View>
                 </Card>
               );

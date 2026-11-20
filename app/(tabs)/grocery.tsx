@@ -15,7 +15,6 @@ import {
   Check,
   CheckCircle2,
   ChevronDown,
-  ChevronRight,
   Copy,
   Info,
   Package,
@@ -46,7 +45,9 @@ import {
 import { colors, categoryLabels, categoryOrder, radius, spacing } from '@/lib/theme';
 import { formatINR, formatQty, relativeTime } from '@/lib/format';
 import { buildGroceryList, lineRetailerName, shoppingListText } from '@/lib/engine/grocery';
-import { packLabel, retailerMap, retailers, DEMO_CATALOG_VERIFIED_AT } from '@/lib/data/products';
+import { packLabel, DEMO_CATALOG_VERIFIED_AT } from '@/lib/data/products';
+import { getRetailerCapabilityView } from '@/lib/retailers/adapters';
+import { RetailerStatusCard } from '@/components/RetailerStatusCard';
 import { GroceryLine, IngredientCategory, Unit } from '@/lib/types';
 
 const UNITS: Unit[] = ['g', 'kg', 'ml', 'l', 'piece'];
@@ -561,32 +562,20 @@ export default function GroceryScreen() {
           with your list in hand.
         </Txt>
         {grocery?.comparisons.map((comparison) => {
-          const info = retailerMap[comparison.retailerId];
+          const view = getRetailerCapabilityView(comparison.retailerId);
           return (
-            <Pressable
+            <RetailerStatusCard
               key={comparison.retailerId}
+              variant="compact"
+              view={view}
+              estimate={comparison.total}
+              matchedLines={comparison.matchedLines}
+              totalLines={comparison.totalLines}
               onPress={() => {
                 setRetailerOpen(false);
                 router.push({ pathname: '/checkout/[retailerId]', params: { retailerId: comparison.retailerId } });
               }}
-              style={({ pressed }) => [styles.retailerRow, pressed && { opacity: 0.75 }]}
-            >
-              <View style={[styles.retailerDot, { backgroundColor: info?.accent ?? colors.forest }]} />
-              <View style={{ flex: 1 }}>
-                <Txt variant="bodyStrong">{comparison.retailerName}</Txt>
-                <Txt variant="tiny" color={colors.inkSoft}>
-                  {info?.mode === 'A' ? 'Sandbox integration' : 'Deep-link handoff'} · {comparison.matchedLines}/
-                  {comparison.totalLines} items matched
-                </Txt>
-                <Txt variant="tiny" color={colors.inkFaint}>
-                  {info?.eta}
-                </Txt>
-              </View>
-              <View style={{ alignItems: 'flex-end' }}>
-                <Txt variant="bodyStrong">{formatINR(comparison.total)}</Txt>
-                <ChevronRight size={15} color={colors.inkFaint} />
-              </View>
-            </Pressable>
+            />
           );
         })}
         <InfoBanner
@@ -710,13 +699,4 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.lineSoft,
   },
-  retailerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingVertical: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.lineSoft,
-  },
-  retailerDot: { width: 10, height: 10, borderRadius: 5 },
 });

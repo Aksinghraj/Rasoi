@@ -20,11 +20,12 @@ Rasoi is an India-first meal planning and smart grocery app built with Expo and 
 - **Retailer adapter layer** with two truthful modes:
   - **Mode A — sandbox** (`Rasoi Market`): local cart and simulated checkout. Clearly labelled; never places a real order.
   - **Mode B — approved deep link** (BigBasket, Blinkit, Zepto, Swiggy Instamart): prepares the list and opens the retailer search. Prices, stock, payment and delivery stay with the retailer.
+- **Retailer status panel**: every comparison and checkout page spells out what Rasoi matched, what it estimates, and what only the retailer can confirm.
 - **Cooking mode**: one step at a time, per-step timers, ingredient checklist, resume support and completion history.
 - **Custom recipes** with ingredient picker, steps, equipment and estimated nutrition and cost.
 - **Preferences and privacy**: diet/allergen/restriction editing, budget, location, language, consent toggles, JSON export and account deletion.
 - **Demo admin console**: analytics, recipe verification, ingredient master, retailer status and audit log.
-- **Automated engine tests** (25 tests) covering conversions, aggregation, pantry deduction, pack optimisation, allergen safety, planner and adapter honesty.
+- **Automated engine tests** (29 tests) covering conversions, aggregation, pantry deduction, pack optimisation, allergen safety, planner and adapter honesty.
 
 ---
 
@@ -530,6 +531,8 @@ Covered:
 - allergen, vegan, custom-exclusion and dairy-free blocking
 - planner servings add/update
 - deep-link adapters refusing unsupported operations
+- retailer capability views never claiming live price, stock or cart access
+- deep-link hand-off, store-page fallback and honest failure copy
 - sandbox cart/checkout never claiming a real order
 
 Type checking:

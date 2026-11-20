@@ -6,7 +6,12 @@ import { isRecipeAllowed } from '@/lib/engine/allergens';
 import { addMealToPlan, emptyDay, updateMealServings } from '@/lib/engine/planner';
 import { matchProductsForIngredient } from '@/lib/data/products';
 import { fromBase, toBase, displayUnitFor } from '@/lib/engine/units';
-import { getRetailerAdapter, RetailerNotSupportedError } from '@/lib/retailers/adapters';
+import {
+  getRetailerAdapter,
+  getRetailerCapabilityView,
+  openRetailerHandoff,
+  RetailerNotSupportedError,
+} from '@/lib/retailers/adapters';
 import {
   MealPlan,
   Preferences,
@@ -297,5 +302,62 @@ describe('retailer adapters', () => {
     expect(checkout.ok).toBe(true);
     expect(checkout.note.toLowerCase()).toContain('no payment');
     expect(checkout.note.toLowerCase()).toContain('no real order');
+  });
+
+  test('capability views never claim live prices, stock or cart access', () => {
+    const deepLink = getRetailerCapabilityView('bigbasket');
+    expect(deepLink.deepLink).toBe(true);
+    expect(deepLink.sandboxCart).toBe(false);
+    expect(deepLink.livePricing).toBe(false);
+    expect(deepLink.liveInventory).toBe(false);
+    expect(deepLink.confirmedServiceability).toBe(false);
+    expect(deepLink.authorisedCartInsertion).toBe(false);
+    expect(deepLink.authorisedCheckout).toBe(false);
+
+    const sandbox = getRetailerCapabilityView('rasoi_market');
+    expect(sandbox.sandboxCart).toBe(true);
+    expect(sandbox.livePricing).toBe(false);
+    expect(sandbox.authorisedCheckout).toBe(false);
+  });
+
+  test('hand-off opens the deep link and says nothing was added to a cart', async () => {
+    const opened: string[] = [];
+    const result = await openRetailerHandoff(getRetailerAdapter('bigbasket'), 'paneer', {
+      canOpen: async () => true,
+      open: async (url) => {
+        opened.push(url);
+      },
+    });
+    expect(result.ok).toBe(true);
+    expect(result.usedFallback).toBe(false);
+    expect(opened[0]).toContain('bigbasket.com');
+    expect(result.note.toLowerCase()).toContain('nothing was added');
+  });
+
+  test('hand-off falls back to the public store page when the deep link fails', async () => {
+    const opened: string[] = [];
+    const result = await openRetailerHandoff(getRetailerAdapter('blinkit'), 'paneer', {
+      canOpen: async () => false,
+      open: async (url) => {
+        opened.push(url);
+      },
+    });
+    expect(result.ok).toBe(true);
+    expect(result.usedFallback).toBe(true);
+    expect(opened[0]).toContain('blinkit.com');
+    expect(result.note.toLowerCase()).toContain('nothing was added');
+  });
+
+  test('hand-off failure is reported without claiming a cart change', async () => {
+    const result = await openRetailerHandoff(getRetailerAdapter('zepto'), 'paneer', {
+      canOpen: async () => false,
+      open: async () => {
+        throw new Error('no app');
+      },
+    });
+    expect(result.ok).toBe(false);
+    expect(result.url).toBeNull();
+    expect(result.note.toLowerCase()).toContain('list is unchanged');
+    expect(result.note.toLowerCase()).toContain('nothing was added');
   });
 });

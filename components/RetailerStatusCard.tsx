@@ -97,7 +97,9 @@ export function RetailerStatusCard({
             {estimate != null ? ` · est. ${formatINR(estimate)}` : ''}
           </Txt>
           <Txt variant="tiny" color={colors.inkFaint} numberOfLines={1}>
-            Final price and stock in the {view.shortName} app
+            {isSandbox
+              ? 'Sandbox estimate · nothing is ordered'
+              : `Final price and stock in the ${view.shortName} app`}
           </Txt>
         </View>
         <ChevronRight size={16} color={colors.inkFaint} />
