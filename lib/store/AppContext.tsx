@@ -9,6 +9,7 @@ import React, {
   useState,
 } from 'react';
 import { recipes as curatedRecipes } from '@/lib/data/recipes';
+import { createDemoUser, createSelfServiceUser } from '@/lib/auth/users';
 import { addDays, startOfWeek, toISODate, uid } from '@/lib/format';
 import {
   addMealToPlan,
@@ -198,14 +199,7 @@ function mergeStored(stored: Partial<AppData>): AppData {
 function demoData(): AppData {
   const base = createEmptyData();
   const now = new Date().toISOString();
-  const user: UserProfile = {
-    id: uid('user'),
-    name: 'Aarav Mehta',
-    phone: '9876543210',
-    authMethod: 'demo',
-    createdAt: now,
-    isAdmin: true,
-  };
+  const user: UserProfile = createDemoUser(now);
   const household: Household = {
     adults: 2,
     children: 1,
@@ -378,15 +372,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             user: { ...prev.user, authMethod: channel },
           };
         }
-        const user: UserProfile = {
-          id: uid('user'),
-          name: channel === 'email' ? identifier.split('@')[0].replace(/[._-]/g, ' ') : 'Rasoi cook',
-          phone: channel === 'phone' ? identifier.replace(/\D/g, '').slice(-10) : undefined,
-          email: channel === 'email' ? identifier : undefined,
-          authMethod: channel,
-          createdAt: now,
-          isAdmin: true,
-        };
+        const user = createSelfServiceUser(
+          channel,
+          identifier,
+        );
         const fresh = createEmptyData();
         return {
           ...fresh,

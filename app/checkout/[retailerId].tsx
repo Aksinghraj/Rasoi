@@ -26,7 +26,7 @@ import {
 import { RetailerStatusCard } from '@/components/RetailerStatusCard';
 import { colors, spacing } from '@/lib/theme';
 import { formatINR, uid } from '@/lib/format';
-import { buildGroceryList, shoppingListText } from '@/lib/engine/grocery';
+import { buildGroceryList, matchLinesForRetailer, shoppingListText } from '@/lib/engine/grocery';
 import { formatQuantity } from '@/lib/engine/units';
 import {
   CartRequestItem,
@@ -74,7 +74,15 @@ export default function CheckoutScreen() {
     });
   }, [activePlan, state.preferences, state.pantry, state.autoDeductPantry, state.extras, state.checkedItems, allRecipes]);
 
-  const buyLines = grocery?.lines.filter((line) => line.toBuy > 0.001) ?? [];
+  const retailerMatches = useMemo(() => {
+    if (!grocery || !retailerId) return null;
+    return matchLinesForRetailer(grocery.lines, retailerId);
+  }, [grocery, retailerId]);
+
+  const buyLines = retailerMatches?.lines ?? [];
+  const estimateTotal = retailerMatches?.total ?? 0;
+  const matchedCount = retailerMatches?.matchedLines ?? 0;
+  const totalLines = retailerMatches?.totalLines ?? 0;
   const pincode = state.preferences?.pincode ?? '';
   const isSandbox = view?.status === 'sandbox';
 
@@ -108,7 +116,7 @@ export default function CheckoutScreen() {
     );
   }
 
-  const cartItems: CartRequestItem[] = buyLines.map((line) => ({
+  const cartItems: CartRequestItem[] = buyLines.map(({ line }) => ({
     ingredientId: line.ingredientId,
     name: line.name,
     quantityBase: line.toBuy,
@@ -121,14 +129,14 @@ export default function CheckoutScreen() {
     retailerName: view.name,
     mode: view.mode,
     status,
-    total: grocery?.totals.estimated ?? 0,
+    total: estimateTotal,
     itemCount: buyLines.length,
     createdAt: new Date().toISOString(),
     note,
-    items: buyLines.map((line) => ({
+    items: buyLines.map(({ line, estimatedPrice }) => ({
       name: line.name,
       quantity: formatQuantity(line.toBuyDisplay, line.toBuyUnit),
-      price: line.estimatedPrice ?? undefined,
+      price: estimatedPrice ?? undefined,
     })),
   });
 
@@ -214,10 +222,10 @@ export default function CheckoutScreen() {
       <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: spacing.xxxl }} showsVerticalScrollIndicator={false}>
         <RetailerStatusCard
           view={view}
-          estimate={grocery?.totals.estimated ?? null}
-          matchedLines={grocery?.totals.matchedCount}
-          totalLines={grocery?.totals.lineCount}
-          onOpen={!isSandbox && buyLines.length > 0 ? () => handOff(buyLines[0]?.name ?? '') : undefined}
+          estimate={retailerMatches ? estimateTotal : null}
+          matchedLines={matchedCount}
+          totalLines={totalLines}
+          onOpen={!isSandbox && buyLines.length > 0 ? () => handOff(buyLines[0].line.name) : undefined}
           opening={busy}
         />
 
@@ -238,9 +246,9 @@ export default function CheckoutScreen() {
             </View>
           ) : (
             <View style={{ marginTop: spacing.sm }}>
-              <Badge label={`Confirmed by ${view.shortName}`} tone="blue" />
+              <Badge label={`Confirm in ${view.shortName} app`} tone="neutral" />
               <Txt variant="tiny" color={colors.inkSoft} style={{ marginTop: spacing.sm }}>
-                {view.serviceabilityNote}
+                Rasoi cannot check {view.shortName} delivery coverage. {view.serviceabilityNote}
               </Txt>
             </View>
           )}
@@ -252,11 +260,11 @@ export default function CheckoutScreen() {
               {buyLines.length} item{buyLines.length === 1 ? '' : 's'} to buy
             </Txt>
             <Txt variant="tiny" color={colors.inkFaint}>
-              {grocery?.totals.matchedCount ?? 0}/{grocery?.totals.lineCount ?? 0} matched
+              {matchedCount}/{totalLines} matched at {view.shortName}
             </Txt>
           </View>
           <Txt variant="tiny" color={colors.inkSoft}>
-            Prices are Rasoi estimates from the demo catalogue, not live {view.shortName} prices.
+            Matches use {view.shortName} sample products only. Prices are demo estimates, not live {view.shortName} quotes.
           </Txt>
         </View>
 
@@ -270,7 +278,7 @@ export default function CheckoutScreen() {
           />
         ) : (
           <Card padded={false} style={{ marginTop: spacing.md }}>
-            {buyLines.map((line, index) => (
+            {buyLines.map(({ line, best, estimatedPrice }, index) => (
               <View key={line.key}>
                 {index > 0 ? <Divider style={{ marginHorizontal: spacing.lg }} /> : null}
                 <View style={styles.lineRow}>
@@ -278,13 +286,13 @@ export default function CheckoutScreen() {
                     <Txt variant="bodyStrong">{line.name}</Txt>
                     <Txt variant="tiny" color={colors.inkSoft}>
                       {formatQuantity(line.toBuyDisplay, line.toBuyUnit)}
-                      {line.best ? ` · ${line.best.product.name}` : ' · no catalogue match'}
+                      {best ? ` · ${best.product.name}` : ` · no ${view.shortName} demo match`}
                     </Txt>
                   </View>
                   <View style={{ alignItems: 'flex-end' }}>
-                    <Txt variant="bodyStrong">{formatINR(line.estimatedPrice)}</Txt>
+                    <Txt variant="bodyStrong">{best ? formatINR(estimatedPrice) : '—'}</Txt>
                     <Txt variant="tiny" color={colors.inkFaint}>
-                      est. only
+                      {best ? 'demo estimate' : 'add manually'}
                     </Txt>
                     {view.deepLink ? (
                       <Pressable
@@ -380,16 +388,22 @@ export default function CheckoutScreen() {
             ) : (
               <>
                 <Button
-                  label={view.openLabel}
-                  icon={<ExternalLink size={16} color={colors.white} />}
-                  loading={busy}
-                  onPress={() => handOff(buyLines[0]?.name ?? '')}
+                  label="Share full grocery list"
+                  icon={<Copy size={16} color={colors.white} />}
+                  onPress={shareList}
                 />
                 <Button
-                  label="Share / copy full list"
+                  label={`Open ${view.shortName} search`}
                   variant="secondary"
-                  icon={<Copy size={16} color={colors.forest} />}
-                  onPress={shareList}
+                  icon={<ExternalLink size={16} color={colors.forest} />}
+                  loading={busy}
+                  onPress={() => handOff(buyLines[0]?.line.name ?? '')}
+                />
+                <InfoBanner
+                  tone="neutral"
+                  title="Add each item yourself"
+                  message={`${view.shortName} opens a search for one item at a time. Share the full list, then add each product to your ${view.shortName} cart inside the ${view.shortName} app. Rasoi never inserts items into a retailer cart or places the order.`}
+                  icon={<Info size={16} color={colors.inkSoft} />}
                 />
               </>
             )}
@@ -397,7 +411,7 @@ export default function CheckoutScreen() {
         ) : null}
 
         <Txt variant="tiny" color={colors.inkFaint} style={{ marginTop: spacing.md, textAlign: 'center' }}>
-          Your list stays saved in Rasoi and is not changed by opening {view.shortName}.
+          Your Rasoi list is saved and unchanged whether {view.shortName} opens or fails to open.
         </Txt>
       </ScrollView>
     </SafeAreaView>

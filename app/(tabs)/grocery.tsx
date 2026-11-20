@@ -43,9 +43,9 @@ import {
   Txt,
 } from '@/components/ui';
 import { colors, categoryLabels, categoryOrder, radius, spacing } from '@/lib/theme';
-import { formatINR, formatQty, relativeTime } from '@/lib/format';
+import { formatINR, formatQty } from '@/lib/format';
 import { buildGroceryList, lineRetailerName, shoppingListText } from '@/lib/engine/grocery';
-import { packLabel, DEMO_CATALOG_VERIFIED_AT } from '@/lib/data/products';
+import { packLabel } from '@/lib/data/products';
 import { getRetailerCapabilityView } from '@/lib/retailers/adapters';
 import { RetailerStatusCard } from '@/components/RetailerStatusCard';
 import { GroceryLine, IngredientCategory, Unit } from '@/lib/types';
@@ -167,7 +167,7 @@ export default function GroceryScreen() {
 
         <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md }}>
           <Badge label="Smart list" tone="mint" icon={<ShoppingBasket size={11} color={colors.forest} />} />
-          <Badge label={`Prices verified ${relativeTime(DEMO_CATALOG_VERIFIED_AT)}`} tone="neutral" />
+          <Badge label="Demo catalogue estimates" tone="neutral" />
         </View>
 
         {notice ? (
@@ -280,7 +280,7 @@ export default function GroceryScreen() {
 
             <InfoBanner
               title="How this list was built"
-              message={`${grocery.totals.lineCount} purchase lines merged from your plan. Pantry stock is deducted automatically, pack sizes are optimised and prices are demo estimates verified ${relativeTime(grocery.generatedAt)}.`}
+              message={`${grocery.totals.lineCount} purchase lines merged from your plan. Pantry stock is deducted automatically, pack sizes are optimised and prices are generated sample data from the demo catalogue — they are not live retailer prices.`}
               tone="neutral"
               icon={<Info size={16} color={colors.inkSoft} />}
             />

@@ -1,11 +1,14 @@
 import { describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { ingredientMap } from '@/lib/data/ingredients';
-import { buildGroceryList } from '@/lib/engine/grocery';
+import { buildGroceryList, matchLinesForRetailer } from '@/lib/engine/grocery';
 import { aggregateMeals, mergeRequirements } from '@/lib/engine/grocery';
 import { isRecipeAllowed } from '@/lib/engine/allergens';
 import { addMealToPlan, emptyDay, updateMealServings } from '@/lib/engine/planner';
 import { matchProductsForIngredient } from '@/lib/data/products';
 import { fromBase, toBase, displayUnitFor } from '@/lib/engine/units';
+import { createDemoUser, createSelfServiceUser } from '@/lib/auth/users';
 import {
   getRetailerAdapter,
   getRetailerCapabilityView,
@@ -359,5 +362,98 @@ describe('retailer adapters', () => {
     expect(result.url).toBeNull();
     expect(result.note.toLowerCase()).toContain('list is unchanged');
     expect(result.note.toLowerCase()).toContain('nothing was added');
+  });
+});
+
+describe('deep-link serviceability honesty', () => {
+  test('deep-link serviceability is never confirmed', async () => {
+    for (const retailerId of ['bigbasket', 'blinkit', 'zepto', 'instamart']) {
+      const adapter = getRetailerAdapter(retailerId);
+      const view = getRetailerCapabilityView(retailerId);
+      expect(view.confirmedServiceability).toBe(false);
+      const result = await adapter.getServiceability('560102');
+      expect(result.serviceable).toBeNull();
+      expect(result.eta).toBe('');
+      expect(result.note.toLowerCase()).not.toContain('confirmed');
+    }
+  });
+
+  test('only the sandbox adapter returns a simulated serviceability result', async () => {
+    const sandbox = await getRetailerAdapter('rasoi_market').getServiceability('560102');
+    expect(sandbox.serviceable).toBe(true);
+    expect(sandbox.note.toLowerCase()).toContain('sandbox');
+  });
+});
+
+describe('account roles', () => {
+  test('newly created phone and email users are never admins', () => {
+    const phoneUser = createSelfServiceUser('phone', '9876543210');
+    const emailUser = createSelfServiceUser('email', 'cook@example.com');
+    expect(phoneUser.isAdmin).toBe(false);
+    expect(emailUser.isAdmin).toBe(false);
+  });
+
+  test('only the seeded demo account is an admin', () => {
+    expect(createDemoUser().isAdmin).toBe(true);
+  });
+});
+
+describe('pricing labels', () => {
+  test('demo catalogue prices are never described as verified', () => {
+    for (const retailerId of ['bigbasket', 'blinkit', 'zepto', 'instamart', 'rasoi_market']) {
+      const view = getRetailerCapabilityView(retailerId);
+      expect(view.estimatedPricing).toBe(true);
+      expect(view.livePricing).toBe(false);
+      expect(view.pricingNote.toLowerCase()).not.toContain('verified');
+    }
+
+    const grocerySource = readFileSync(join(import.meta.dir, '../app/(tabs)/grocery.tsx'), 'utf8');
+    expect(grocerySource).not.toContain('Prices verified');
+    expect(grocerySource.toLowerCase()).not.toContain('verified live');
+    expect(grocerySource).toContain('Demo catalogue estimates');
+  });
+});
+
+describe('retailer-specific checkout matching', () => {
+  const plan = planWith('paneer-dish');
+  const list = buildGroceryList({
+    plan,
+    recipes: [recipe('paneer-dish', [paneer(450)])],
+    pantry: [],
+    autoDeduct: true,
+    extras: [],
+    checked: {},
+  });
+
+  for (const retailerId of ['bigbasket', 'blinkit', 'zepto', 'instamart']) {
+    test(`${retailerId} checkout matches only ${retailerId} products`, () => {
+      const matches = matchLinesForRetailer(list.lines, retailerId);
+      expect(matches.lines.length).toBeGreaterThan(0);
+      for (const entry of matches.lines) {
+        expect(entry.best).not.toBeNull();
+        expect(entry.best?.product.retailerId).toBe(retailerId);
+      }
+      expect(matches.matchedLines).toBe(matches.totalLines);
+      expect(matches.total).toBeGreaterThan(0);
+    });
+  }
+
+  test('each retailer gets its own estimated total', () => {
+    const totals = ['bigbasket', 'blinkit', 'zepto', 'instamart'].map(
+      (retailerId) => matchLinesForRetailer(list.lines, retailerId).total,
+    );
+    expect(new Set(totals).size).toBeGreaterThan(1);
+  });
+
+  test('a failed hand-off leaves the shopping list untouched', async () => {
+    const before = JSON.stringify(list);
+    const result = await openRetailerHandoff(getRetailerAdapter('instamart'), 'paneer', {
+      canOpen: async () => false,
+      open: async () => {
+        throw new Error('no app');
+      },
+    });
+    expect(result.ok).toBe(false);
+    expect(JSON.stringify(list)).toBe(before);
   });
 });

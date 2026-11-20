@@ -9,6 +9,7 @@ import {
   MealPlan,
   NutritionSummary,
   PantryItem,
+  Product,
   ProductMatch,
   Recipe,
   Unit,
@@ -26,6 +27,21 @@ export interface Requirement {
   ingredient: Ingredient;
   requiredBase: number;
   sources: GrocerySource[];
+}
+
+/** A grocery line re-matched against a single retailer's demo catalogue. */
+export interface RetailerLineMatch {
+  line: GroceryLine;
+  best: ProductMatch | null;
+  estimatedPrice: number | null;
+}
+
+export interface RetailerLineMatches {
+  retailerId: string;
+  lines: RetailerLineMatch[];
+  total: number;
+  matchedLines: number;
+  totalLines: number;
 }
 
 export function aggregateMeals(meals: MealWithRecipe[]): Requirement[] {
@@ -263,6 +279,32 @@ export function buildGroceryList(options: BuildGroceryOptions): GroceryList {
     },
     nutrition: planNutrition(meals),
     comparisons,
+  };
+}
+
+export function matchLinesForRetailer(
+  lines: GroceryLine[],
+  retailerId: string,
+  catalogue: Product[] = defaultProducts,
+): RetailerLineMatches {
+  const matches = lines
+    .filter((line) => line.toBuy > 0.001)
+    .map((line) => {
+      const result = matchProductsForIngredient(line.ingredientId, line.toBuy, catalogue, retailerId);
+      const best = result.best;
+      return {
+        line,
+        best,
+        estimatedPrice: best ? best.totalPrice : null,
+      };
+    });
+  const total = matches.reduce((sum, entry) => sum + (entry.estimatedPrice ?? 0), 0);
+  return {
+    retailerId,
+    lines: matches,
+    total: Math.round(total * 100) / 100,
+    matchedLines: matches.filter((entry) => entry.best !== null).length,
+    totalLines: matches.length,
   };
 }
 

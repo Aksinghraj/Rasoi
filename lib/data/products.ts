@@ -129,7 +129,7 @@ export const retailers: RetailerInfo[] = [
     openLabel: 'Open Instamart',
     pricingNote: 'Instamart prices and fees are set by Swiggy. Rasoi estimates are indicative only.',
     stockNote: 'Instamart stock is managed by Swiggy and is not visible to Rasoi.',
-    serviceabilityNote: 'Instamart delivery availability is confirmed by Swiggy inside the app.',
+    serviceabilityNote: 'Instamart delivery availability is checked by Swiggy inside the app.',
     handoffTip: 'Opens Instamart search. Your Rasoi list is kept unchanged so you can follow it in Swiggy.',
   },
 ];
