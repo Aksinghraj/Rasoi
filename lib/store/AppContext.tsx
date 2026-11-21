@@ -19,6 +19,38 @@ import {
 import { addDays, isValidISODate, startOfWeek, toISODate, uid } from '@/lib/format';
 import { mergeExtraItem } from '@/lib/engine/grocery';
 import {
+  createEmptyData,
+  defaultConsents,
+  defaultNotifications,
+  defaultPreferences,
+} from '@/lib/store/defaults';
+import { isSupabaseConfigured } from '@/lib/supabase/config';
+import { getSupabase } from '@/lib/supabase/client';
+import {
+  cloudAccountToProfile,
+  cloudUserToProfile,
+  deleteCloudAccount,
+  getCloudSession,
+  sendEmailCode as cloudSendEmailCode,
+  signInWithPassword as cloudSignInWithPassword,
+  signOutCloud,
+  signUpWithPassword as cloudSignUpWithPassword,
+  subscribeToCloudAuth,
+  verifyEmailCode as cloudVerifyEmailCode,
+} from '@/lib/auth/cloud';
+import { isNetworkError } from '@/lib/auth/validation';
+import { runSync } from '@/lib/sync/engine';
+import {
+  SyncQueueState,
+  emptyQueue,
+  enqueue,
+  markFailed,
+  markSynced,
+  parseQueue,
+  retryDelayMs,
+} from '@/lib/sync/queue';
+import { SupabaseSyncRepository } from '@/lib/sync/repository';
+import {
   addMealToPlan,
   copyDay as copyDayInPlan,
   replaceMeal as replaceMealInPlan,
@@ -53,66 +85,33 @@ import {
 } from '@/lib/types';
 
 const STORAGE_KEY = 'rasoi.app.v1';
+const SYNC_KEY = 'rasoi.sync.v1';
 
-export const defaultConsents: Consents = {
-  analytics: false,
-  personalisation: true,
-  offers: false,
-  retailerSharing: false,
-};
+export { defaultConsents, defaultNotifications, defaultPreferences } from '@/lib/store/defaults';
 
-export const defaultNotifications: NotificationSettings = {
-  weeklyPlan: true,
-  groceryReminder: true,
-  pantryExpiry: true,
-  cookingReminder: false,
-  offers: false,
-};
+export type CloudStatus =
+  | 'disabled'
+  | 'signed_out'
+  | 'connecting'
+  | 'syncing'
+  | 'synced'
+  | 'offline'
+  | 'error';
 
-export const defaultPreferences: Preferences = {
-  country: 'India',
-  state: 'Karnataka',
-  city: 'Bengaluru',
-  pincode: '',
-  locality: '',
-  diet: 'vegetarian',
-  region: 'Karnataka',
-  restrictions: [],
-  allergens: [],
-  customExclusions: [],
-  dislikes: [],
-  equipment: ['gas_stove', 'mixer_grinder'],
-  budget: { daily: 500, weekly: 3500, monthly: 14000 },
-  mealTypes: ['breakfast', 'lunch', 'dinner', 'snack'],
-  cookingTime: 'balanced',
-  planDay: 'monday',
-  language: 'en',
-};
+export interface CloudState {
+  configured: boolean;
+  status: CloudStatus;
+  email: string | null;
+  userId: string | null;
+  lastSyncedAt: string | null;
+  pending: boolean;
+  error: string | null;
+}
 
-function createEmptyData(): AppData {
-  return {
-    session: null,
-    user: null,
-    household: null,
-    preferences: null,
-    pantry: [],
-    autoDeductPantry: true,
-    favorites: [],
-    plans: [],
-    activePlanId: null,
-    recentRecipeIds: [],
-    customRecipes: [],
-    extras: [],
-    checkedItems: {},
-    cooking: null,
-    cookingHistory: [],
-    orders: [],
-    notifications: defaultNotifications,
-    consents: defaultConsents,
-    auditLogs: [],
-    verifiedRecipeIds: [],
-    createdAt: new Date().toISOString(),
-  };
+export interface CloudActionResult {
+  ok: boolean;
+  error?: string;
+  needsConfirmation?: boolean;
 }
 
 export interface OnboardingPayload {
@@ -125,10 +124,16 @@ interface AppContextValue {
   state: AppData;
   hydrated: boolean;
   pendingOtp: PendingOtp | null;
+  cloud: CloudState;
   allRecipes: Recipe[];
   activePlan: MealPlan | null;
   requestOtp: (identifier: string, channel: 'phone' | 'email') => Promise<{ ok: boolean; error?: string; code?: string }>;
   verifyOtp: (code: string) => Promise<{ ok: boolean; error?: string }>;
+  sendEmailCode: (email: string) => Promise<CloudActionResult>;
+  verifyEmailCode: (email: string, code: string) => Promise<CloudActionResult>;
+  signInWithPassword: (email: string, password: string) => Promise<CloudActionResult>;
+  signUpWithPassword: (email: string, password: string, name?: string) => Promise<CloudActionResult>;
+  syncNow: () => Promise<void>;
   signInDemo: () => Promise<void>;
   signOut: () => Promise<void>;
   deleteAccount: () => Promise<void>;
@@ -472,19 +477,62 @@ function demoData(): AppData {
   };
 }
 
+function stateHash(state: AppData): string {
+  const payload = JSON.stringify(state, (key, value) => (key === 'session' ? undefined : value));
+  let hash = 5381;
+  for (let index = 0; index < payload.length; index += 1) {
+    hash = ((hash << 5) + hash + payload.charCodeAt(index)) | 0;
+  }
+  return String(hash);
+}
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AppData>(createEmptyData);
   const [hydrated, setHydrated] = useState(false);
   const [pendingOtp, setPendingOtp] = useState<PendingOtp | null>(null);
+  const [queue, setQueue] = useState<SyncQueueState>(emptyQueue);
+  const [cloud, setCloud] = useState<CloudState>(() => {
+    const configured = isSupabaseConfigured();
+    return {
+      configured,
+      status: configured ? 'connecting' : 'disabled',
+      email: null,
+      userId: null,
+      lastSyncedAt: null,
+      pending: false,
+      error: null,
+    };
+  });
   const hydratedRef = useRef(false);
   const stateRef = useRef(state);
+  const queueRef = useRef(queue);
+  const cloudReadyRef = useRef(false);
+  const lastSyncedHashRef = useRef<string | null>(null);
+  const syncInFlightRef = useRef(false);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   stateRef.current = state;
+  queueRef.current = queue;
+
+  const persistQueue = useCallback((next: SyncQueueState) => {
+    queueRef.current = next;
+    setQueue(next);
+    AsyncStorage.setItem(SYNC_KEY, JSON.stringify(next)).catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     let mounted = true;
-    AsyncStorage.getItem(STORAGE_KEY)
-      .then((raw) => {
+    Promise.all([AsyncStorage.getItem(STORAGE_KEY), AsyncStorage.getItem(SYNC_KEY)])
+      .then(([raw, rawQueue]) => {
         if (!mounted) return;
+        if (rawQueue) {
+          try {
+            const parsed = parseQueue(JSON.parse(rawQueue));
+            queueRef.current = parsed;
+            setQueue(parsed);
+          } catch {
+            queueRef.current = emptyQueue;
+          }
+        }
         if (raw) {
           try {
             setState(mergeStored(JSON.parse(raw)));
@@ -524,6 +572,194 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       flush();
       subscription.remove();
     };
+  }, []);
+
+  const syncRef = useRef<((local?: AppData) => Promise<void>) | null>(null);
+
+  const scheduleRetry = useCallback(() => {
+    if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+    const delay = retryDelayMs(queueRef.current);
+    retryTimerRef.current = setTimeout(() => {
+      void syncRef.current?.();
+    }, Math.max(1500, delay));
+  }, []);
+
+  const applyCloudIdentity = useCallback((profile: UserProfile): AppData => {
+    const prev = stateRef.current;
+    const next: AppData = {
+      ...prev,
+      user: profile,
+      session: {
+        userId: profile.id,
+        method: profile.authMethod,
+        signedInAt: new Date().toISOString(),
+      },
+    };
+    setState(next);
+    stateRef.current = next;
+    setCloud((current) => ({
+      ...current,
+      userId: profile.id,
+      email: profile.email ?? null,
+      error: null,
+    }));
+    return next;
+  }, []);
+
+  const runCloudSync = useCallback(
+    async (localOverride?: AppData) => {
+      const supabase = getSupabase();
+      if (!supabase) return;
+      const local = localOverride ?? stateRef.current;
+      const userId = local.user?.id;
+      if (!userId || local.user?.authMethod === 'demo') return;
+      if (syncInFlightRef.current) return;
+
+      syncInFlightRef.current = true;
+      if (retryTimerRef.current) {
+        clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = null;
+      }
+      setCloud((prev) => ({ ...prev, status: 'syncing', error: null }));
+
+      try {
+        const repo = new SupabaseSyncRepository(supabase, userId);
+        const result = await runSync({
+          repo,
+          local,
+          userId,
+          pending: queueRef.current.pending,
+        });
+
+        if (!result.ok) {
+          const message = result.error ?? 'Sync failed. Your changes are still saved on this device.';
+          persistQueue(markFailed(queueRef.current, message));
+          setCloud((prev) => ({
+            ...prev,
+            status: result.offline ? 'offline' : 'error',
+            userId,
+            email: local.user?.email ?? prev.email,
+            pending: true,
+            error: message,
+          }));
+          scheduleRetry();
+          return;
+        }
+
+        const applied = result.state ?? local;
+        if (result.pulled && result.state) {
+          setState(applied);
+          stateRef.current = applied;
+        }
+        const nextQueue = markSynced(queueRef.current);
+        persistQueue(nextQueue);
+        lastSyncedHashRef.current = stateHash(applied);
+        setCloud((prev) => ({
+          ...prev,
+          status: 'synced',
+          userId,
+          email: applied.user?.email ?? prev.email,
+          lastSyncedAt: nextQueue.lastSyncedAt,
+          pending: false,
+          error: null,
+        }));
+      } catch (error) {
+        const message =
+          error instanceof Error && error.message
+            ? `Sync failed: ${error.message.slice(0, 200)}`
+            : 'Sync failed. Your changes are still saved on this device.';
+        persistQueue(markFailed(queueRef.current, message));
+        setCloud((prev) => ({
+          ...prev,
+          status: isNetworkError(message) ? 'offline' : 'error',
+          userId,
+          pending: true,
+          error: message,
+        }));
+        scheduleRetry();
+      } finally {
+        syncInFlightRef.current = false;
+      }
+    },
+    [persistQueue, scheduleRetry],
+  );
+  syncRef.current = runCloudSync;
+
+  useEffect(() => {
+    const supabase = getSupabase();
+    if (!supabase) {
+      cloudReadyRef.current = true;
+      return;
+    }
+
+    let mounted = true;
+
+    (async () => {
+      const result = await getCloudSession();
+      if (!mounted) return;
+      if (result.ok && result.data?.user) {
+        const profile = cloudUserToProfile(result.data.user, stateRef.current.user?.name);
+        const next = applyCloudIdentity(profile);
+        cloudReadyRef.current = true;
+        await runCloudSync(next);
+      } else {
+        cloudReadyRef.current = true;
+        lastSyncedHashRef.current = stateHash(stateRef.current);
+        setCloud((prev) => ({
+          ...prev,
+          status: 'signed_out',
+          error: result.ok ? null : result.error ?? null,
+        }));
+      }
+    })();
+
+    const unsubscribe = subscribeToCloudAuth((session) => {
+      if (!mounted) return;
+      if (session?.user) {
+        const profile = cloudUserToProfile(session.user, stateRef.current.user?.name);
+        const next = applyCloudIdentity(profile);
+        cloudReadyRef.current = true;
+        void runCloudSync(next);
+      } else if (cloudReadyRef.current) {
+        setCloud((prev) => ({
+          ...prev,
+          status: 'signed_out',
+          userId: null,
+          email: null,
+          pending: false,
+        }));
+      }
+    });
+
+    return () => {
+      mounted = false;
+      unsubscribe?.();
+    };
+  }, [applyCloudIdentity, runCloudSync]);
+
+  // Local changes are queued and pushed after a short debounce. The hash guard
+  // stops a pull from being echoed back as a push.
+  useEffect(() => {
+    if (!hydrated || !cloudReadyRef.current || !cloud.userId) return;
+    if (state.user?.authMethod === 'demo') return;
+    const hash = stateHash(state);
+    if (hash === lastSyncedHashRef.current) return;
+    persistQueue(enqueue(queueRef.current));
+    setCloud((prev) => (prev.pending ? prev : { ...prev, pending: true }));
+    const timer = setTimeout(() => {
+      void syncRef.current?.();
+    }, 1200);
+    return () => clearTimeout(timer);
+  }, [state, hydrated, cloud.userId, persistQueue]);
+
+  // Retry as soon as the app returns to the foreground.
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (next) => {
+      if (next === 'active' && queueRef.current.pending) {
+        void syncRef.current?.();
+      }
+    });
+    return () => subscription.remove();
   }, []);
 
   const allRecipes = useMemo(
@@ -617,25 +853,124 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [pendingOtp],
   );
 
+  const resetCloud = useCallback(
+    (status: CloudStatus) => {
+      persistQueue(emptyQueue);
+      lastSyncedHashRef.current = null;
+      setCloud((prev) => ({
+        ...prev,
+        status,
+        userId: null,
+        email: null,
+        pending: false,
+        error: null,
+      }));
+    },
+    [persistQueue],
+  );
+
+  const adoptCloudProfile = useCallback(
+    async (profile: UserProfile) => {
+      const next = applyCloudIdentity(profile);
+      await runCloudSync(next);
+    },
+    [applyCloudIdentity, runCloudSync],
+  );
+
   const signInDemo = useCallback(async () => {
+    await signOutCloud();
     setState(demoData());
     setPendingOtp(null);
-  }, []);
+    resetCloud('signed_out');
+  }, [resetCloud]);
 
   const signOut = useCallback(async () => {
+    await signOutCloud();
     setState((prev) => ({ ...prev, session: null, cooking: null }));
     setPendingOtp(null);
-  }, []);
+    resetCloud(isSupabaseConfigured() ? 'signed_out' : 'disabled');
+  }, [resetCloud]);
 
   const deleteAccount = useCallback(async () => {
-    await AsyncStorage.removeItem(STORAGE_KEY);
+    if (cloud.userId) {
+      const result = await deleteCloudAccount();
+      if (!result.ok) {
+        setCloud((prev) => ({ ...prev, error: result.error ?? 'Could not delete the account.' }));
+        return;
+      }
+    }
+    await AsyncStorage.multiRemove([STORAGE_KEY, SYNC_KEY]);
     setState(createEmptyData());
     setPendingOtp(null);
+    resetCloud(isSupabaseConfigured() ? 'signed_out' : 'disabled');
+  }, [cloud.userId, resetCloud]);
+
+  const sendEmailCode = useCallback(async (email: string): Promise<CloudActionResult> => {
+    setCloud((prev) => ({ ...prev, error: null }));
+    const result = await cloudSendEmailCode(email);
+    if (!result.ok) {
+      setCloud((prev) => ({ ...prev, error: result.error ?? 'Could not send the code.' }));
+      return { ok: false, error: result.error ?? 'Could not send the code.' };
+    }
+    return { ok: true };
   }, []);
 
-  const completeOnboarding = useCallback(async (payload: OnboardingPayload) => {
-    setState((prev) => {
-      if (!prev.session || !prev.user) return prev;
+  const verifyEmailCode = useCallback(
+    async (email: string, code: string): Promise<CloudActionResult> => {
+      setCloud((prev) => ({ ...prev, error: null }));
+      const result = await cloudVerifyEmailCode(email, code);
+      if (!result.ok || !result.data) {
+        const error = result.error ?? 'That code did not work. Request a fresh one.';
+        setCloud((prev) => ({ ...prev, error }));
+        return { ok: false, error };
+      }
+      await adoptCloudProfile(cloudAccountToProfile(result.data, stateRef.current.user?.name));
+      return { ok: true };
+    },
+    [adoptCloudProfile],
+  );
+
+  const signInWithPassword = useCallback(
+    async (email: string, password: string): Promise<CloudActionResult> => {
+      setCloud((prev) => ({ ...prev, error: null }));
+      const result = await cloudSignInWithPassword(email, password);
+      if (!result.ok || !result.data) {
+        const error = result.error ?? 'Could not sign in.';
+        setCloud((prev) => ({ ...prev, error }));
+        return { ok: false, error };
+      }
+      await adoptCloudProfile(cloudAccountToProfile(result.data, stateRef.current.user?.name));
+      return { ok: true };
+    },
+    [adoptCloudProfile],
+  );
+
+  const signUpWithPassword = useCallback(
+    async (email: string, password: string, name?: string): Promise<CloudActionResult> => {
+      setCloud((prev) => ({ ...prev, error: null }));
+      const result = await cloudSignUpWithPassword(email, password, name);
+      if (!result.ok || !result.data) {
+        const error = result.error ?? 'Could not create the account.';
+        setCloud((prev) => ({ ...prev, error }));
+        return { ok: false, error };
+      }
+      if (result.needsConfirmation) {
+        return { ok: true, needsConfirmation: true };
+      }
+      await adoptCloudProfile(cloudAccountToProfile(result.data, name));
+      return { ok: true };
+    },
+    [adoptCloudProfile],
+  );
+
+  const syncNow = useCallback(async () => {
+    await runCloudSync();
+  }, [runCloudSync]);
+
+  const completeOnboarding = useCallback(
+    async (payload: OnboardingPayload) => {
+      const prev = stateRef.current;
+      if (!prev.session || !prev.user) return;
       const plan = generatePlan({
         prefs: payload.preferences,
         recipes: curatedRecipes,
@@ -644,7 +979,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         name: 'My first week',
       });
       const now = new Date().toISOString();
-      return {
+      const next: AppData = {
         ...prev,
         user: { ...prev.user, name: payload.name.trim() || prev.user.name },
         household: payload.household,
@@ -662,8 +997,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           ...prev.auditLogs,
         ],
       };
-    });
-  }, []);
+      setState(next);
+      stateRef.current = next;
+      if (next.user && next.user.authMethod !== 'demo' && cloud.userId) {
+        persistQueue(enqueue(queueRef.current));
+        void runCloudSync(next);
+      }
+    },
+    [cloud.userId, persistQueue, runCloudSync],
+  );
 
   const updatePreferences = useCallback((patch: Partial<Preferences>) => {
     setState((prev) =>
@@ -1066,10 +1408,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     state,
     hydrated,
     pendingOtp,
+    cloud,
     allRecipes,
     activePlan,
     requestOtp,
     verifyOtp,
+    sendEmailCode,
+    verifyEmailCode,
+    signInWithPassword,
+    signUpWithPassword,
+    syncNow,
     signInDemo,
     signOut,
     deleteAccount,

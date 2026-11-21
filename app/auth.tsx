@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import {
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -11,7 +10,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { ArrowRight, Check, Leaf, Mail, Phone, ShieldCheck, Sparkles } from 'lucide-react-native';
+import { ArrowRight, Check, Leaf, Lock, Mail, Phone, ShieldCheck, Sparkles } from 'lucide-react-native';
 import { useApp } from '@/lib/store/AppContext';
 import { Button, Field, FoodImage, InfoBanner, Sheet, Txt } from '@/components/ui';
 import { colors, radius, shadow, spacing } from '@/lib/theme';
@@ -19,22 +18,63 @@ import { colors, radius, shadow, spacing } from '@/lib/theme';
 const HERO_IMAGE =
   'https://images.pexels.com/photos/2474661/pexels-photo-2474661.jpeg?auto=compress&cs=tinysrgb&w=1200&h=800&fit=crop';
 
+type AuthMode = 'otp' | 'password';
+
 export default function AuthScreen() {
-  const { requestOtp, verifyOtp, signInDemo, pendingOtp } = useApp();
+  const {
+    requestOtp,
+    verifyOtp,
+    sendEmailCode,
+    verifyEmailCode,
+    signInWithPassword,
+    signUpWithPassword,
+    signInDemo,
+    pendingOtp,
+    cloud,
+  } = useApp();
   const router = useRouter();
+  const [mode, setMode] = useState<AuthMode>('otp');
   const [channel, setChannel] = useState<'phone' | 'email'>('phone');
   const [identifier, setIdentifier] = useState('');
   const [code, setCode] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+  const [passwordTab, setPasswordTab] = useState<'signin' | 'signup'>('signin');
   const [stage, setStage] = useState<'identifier' | 'code'>('identifier');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [googleSheet, setGoogleSheet] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [cloudCodeSent, setCloudCodeSent] = useState(false);
+
+  const emailUsesCloud = channel === 'email' && cloud.configured;
+
+  const switchMode = (next: AuthMode) => {
+    setMode(next);
+    setStage('identifier');
+    setCode('');
+    setPassword('');
+    setError(null);
+    setNotice(null);
+    setCloudCodeSent(false);
+  };
 
   const sendCode = async () => {
     setError(null);
     setNotice(null);
     setBusy(true);
+    if (emailUsesCloud) {
+      const result = await sendEmailCode(identifier);
+      setBusy(false);
+      if (!result.ok) {
+        setError(result.error ?? 'Could not send the code.');
+        return;
+      }
+      setCloudCodeSent(true);
+      setStage('code');
+      setNotice(`We emailed a six-digit code to ${identifier.trim()}.`);
+      return;
+    }
     await new Promise((resolve) => setTimeout(resolve, 450));
     const result = await requestOtp(identifier, channel);
     setBusy(false);
@@ -42,17 +82,40 @@ export default function AuthScreen() {
       setError(result.error ?? 'Could not create a code.');
       return;
     }
+    setCloudCodeSent(false);
     setStage('code');
   };
 
   const verify = async () => {
     setError(null);
     setBusy(true);
-    await new Promise((resolve) => setTimeout(resolve, 450));
-    const result = await verifyOtp(code);
+    const result = cloudCodeSent
+      ? await verifyEmailCode(identifier, code)
+      : await verifyOtp(code);
     setBusy(false);
     if (!result.ok) {
       setError(result.error ?? 'Could not verify that code.');
+      return;
+    }
+    router.replace('/(tabs)');
+  };
+
+  const submitPassword = async () => {
+    setError(null);
+    setNotice(null);
+    setBusy(true);
+    const result =
+      passwordTab === 'signin'
+        ? await signInWithPassword(identifier, password)
+        : await signUpWithPassword(identifier, password, name);
+    setBusy(false);
+    if (!result.ok) {
+      setError(result.error ?? 'Could not sign in.');
+      return;
+    }
+    if (result.needsConfirmation) {
+      setNotice(`Check ${identifier.trim()} for a confirmation link, then sign in with your password.`);
+      setPasswordTab('signin');
       return;
     }
     router.replace('/(tabs)');
@@ -107,122 +170,243 @@ export default function AuthScreen() {
             <View style={styles.handle} />
             <Txt variant="h1">Welcome to your kitchen</Txt>
             <Txt variant="small" color={colors.inkSoft} style={{ marginTop: 4 }}>
-              Sign in with a one-time code. No passwords stored on your device.
+              {cloud.configured
+                ? 'Sign in to sync your plans, pantry and lists across devices.'
+                : 'Sign in to keep your kitchen in one place. Cloud sync is off in this build.'}
             </Txt>
 
-            {stage === 'identifier' ? (
+            <View style={styles.modeRow}>
+              <Pressable
+                onPress={() => switchMode('otp')}
+                style={[styles.modeItem, mode === 'otp' && styles.modeActive]}
+              >
+                <Txt variant="small" color={mode === 'otp' ? colors.forest : colors.inkSoft} style={{ fontWeight: '700' }}>
+                  One-time code
+                </Txt>
+              </Pressable>
+              <Pressable
+                onPress={() => switchMode('password')}
+                style={[styles.modeItem, mode === 'password' && styles.modeActive]}
+              >
+                <Txt variant="small" color={mode === 'password' ? colors.forest : colors.inkSoft} style={{ fontWeight: '700' }}>
+                  Password
+                </Txt>
+              </Pressable>
+            </View>
+
+            {mode === 'otp' ? (
+              stage === 'identifier' ? (
+                <>
+                  <View style={styles.segment}>
+                    <Pressable
+                      onPress={() => {
+                        setChannel('phone');
+                        setIdentifier('');
+                        setError(null);
+                        setNotice(null);
+                      }}
+                      style={[styles.segmentItem, channel === 'phone' && styles.segmentActive]}
+                    >
+                      <Phone size={15} color={channel === 'phone' ? colors.forest : colors.inkSoft} />
+                      <Txt variant="small" color={channel === 'phone' ? colors.forest : colors.inkSoft} style={{ fontWeight: '700' }}>
+                        Phone
+                      </Txt>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => {
+                        setChannel('email');
+                        setIdentifier('');
+                        setError(null);
+                        setNotice(null);
+                      }}
+                      style={[styles.segmentItem, channel === 'email' && styles.segmentActive]}
+                    >
+                      <Mail size={15} color={channel === 'email' ? colors.forest : colors.inkSoft} />
+                      <Txt variant="small" color={channel === 'email' ? colors.forest : colors.inkSoft} style={{ fontWeight: '700' }}>
+                        Email
+                      </Txt>
+                    </Pressable>
+                  </View>
+
+                  {channel === 'phone' ? (
+                    <Field
+                      label="Mobile number"
+                      placeholder="98765 43210"
+                      keyboardType="phone-pad"
+                      autoComplete="tel"
+                      value={identifier}
+                      onChangeText={(value) => setIdentifier(value.replace(/[^0-9 ]/g, ''))}
+                      maxLength={13}
+                      error={error ?? undefined}
+                      helper="Indian mobile numbers only. +91 is added automatically."
+                      right={<Txt variant="small" color={colors.inkFaint}>+91</Txt>}
+                    />
+                  ) : (
+                    <Field
+                      label="Email address"
+                      placeholder="you@example.com"
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      autoComplete="email"
+                      value={identifier}
+                      onChangeText={setIdentifier}
+                      error={error ?? undefined}
+                      helper={emailUsesCloud ? 'We email a six-digit sign-in code.' : 'Local demo code. Cloud email is not configured.'}
+                    />
+                  )}
+
+                  <Button
+                    label="Send one-time code"
+                    onPress={sendCode}
+                    loading={busy}
+                    icon={<ArrowRight size={17} color={colors.white} />}
+                  />
+                </>
+              ) : (
+                <>
+                  {cloudCodeSent ? (
+                    <InfoBanner
+                      title="Check your inbox"
+                      message={`We sent a six-digit code to ${identifier.trim()}. It expires shortly, so use it soon.`}
+                      tone="neutral"
+                      icon={<Mail size={16} color={colors.inkSoft} />}
+                    />
+                  ) : (
+                    <InfoBanner
+                      title={`Demo code for ${pendingOtp?.identifier ?? ''}`}
+                      message={`${pendingOtp?.code ?? '------'} · This build shows the OTP on screen. Connect an SMS or email provider before production.`}
+                      tone="orange"
+                    />
+                  )}
+                  <View style={{ height: spacing.md }} />
+                  <Field
+                    label="Six-digit code"
+                    placeholder="000000"
+                    keyboardType="number-pad"
+                    value={code}
+                    onChangeText={(value) => setCode(value.replace(/[^0-9]/g, '').slice(0, 6))}
+                    maxLength={6}
+                    error={error ?? undefined}
+                    helper="Codes expire after five minutes."
+                  />
+                  <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                    <Button
+                      label="Verify & continue"
+                      onPress={verify}
+                      loading={busy}
+                      disabled={code.length !== 6}
+                      style={{ flex: 1 }}
+                    />
+                    {!cloudCodeSent ? (
+                      <Button
+                        label="Use demo code"
+                        variant="secondary"
+                        size="md"
+                        fullWidth={false}
+                        onPress={() => setCode(pendingOtp?.code ?? '')}
+                      />
+                    ) : null}
+                  </View>
+                  <Pressable
+                    onPress={() => {
+                      setStage('identifier');
+                      setCode('');
+                      setError(null);
+                      setNotice(null);
+                      setCloudCodeSent(false);
+                    }}
+                    style={{ marginTop: spacing.md, alignSelf: 'center' }}
+                  >
+                    <Txt variant="small" color={colors.forest} style={{ fontWeight: '600' }}>
+                      Use a different number or email
+                    </Txt>
+                  </Pressable>
+                </>
+              )
+            ) : (
               <>
                 <View style={styles.segment}>
                   <Pressable
                     onPress={() => {
-                      setChannel('phone');
-                      setIdentifier('');
+                      setPasswordTab('signin');
                       setError(null);
+                      setNotice(null);
                     }}
-                    style={[styles.segmentItem, channel === 'phone' && styles.segmentActive]}
+                    style={[styles.segmentItem, passwordTab === 'signin' && styles.segmentActive]}
                   >
-                    <Phone size={15} color={channel === 'phone' ? colors.forest : colors.inkSoft} />
-                    <Txt variant="small" color={channel === 'phone' ? colors.forest : colors.inkSoft} style={{ fontWeight: '700' }}>
-                      Phone
+                    <Txt variant="small" color={passwordTab === 'signin' ? colors.forest : colors.inkSoft} style={{ fontWeight: '700' }}>
+                      Sign in
                     </Txt>
                   </Pressable>
                   <Pressable
                     onPress={() => {
-                      setChannel('email');
-                      setIdentifier('');
+                      setPasswordTab('signup');
                       setError(null);
+                      setNotice(null);
                     }}
-                    style={[styles.segmentItem, channel === 'email' && styles.segmentActive]}
+                    style={[styles.segmentItem, passwordTab === 'signup' && styles.segmentActive]}
                   >
-                    <Mail size={15} color={channel === 'email' ? colors.forest : colors.inkSoft} />
-                    <Txt variant="small" color={channel === 'email' ? colors.forest : colors.inkSoft} style={{ fontWeight: '700' }}>
-                      Email
+                    <Txt variant="small" color={passwordTab === 'signup' ? colors.forest : colors.inkSoft} style={{ fontWeight: '700' }}>
+                      Create account
                     </Txt>
                   </Pressable>
                 </View>
 
-                {channel === 'phone' ? (
+                {passwordTab === 'signup' ? (
                   <Field
-                    label="Mobile number"
-                    placeholder="98765 43210"
-                    keyboardType="phone-pad"
-                    autoComplete="tel"
-                    value={identifier}
-                    onChangeText={(value) => setIdentifier(value.replace(/[^0-9 ]/g, ''))}
-                    maxLength={13}
-                    error={error ?? undefined}
-                    helper="Indian mobile numbers only. +91 is added automatically."
-                    right={<Txt variant="small" color={colors.inkFaint}>+91</Txt>}
+                    label="Your name"
+                    placeholder="Meera"
+                    autoComplete="name"
+                    value={name}
+                    onChangeText={setName}
+                    helper="Used to greet you in the kitchen."
                   />
-                ) : (
-                  <Field
-                    label="Email address"
-                    placeholder="you@example.com"
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                    autoComplete="email"
-                    value={identifier}
-                    onChangeText={setIdentifier}
-                    error={error ?? undefined}
-                    helper="We email a six-digit sign-in code."
-                  />
-                )}
+                ) : null}
+
+                <Field
+                  label="Email address"
+                  placeholder="you@example.com"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoComplete="email"
+                  value={identifier}
+                  onChangeText={setIdentifier}
+                  error={error ?? undefined}
+                />
+
+                <Field
+                  label="Password"
+                  placeholder="At least 8 characters"
+                  secureTextEntry
+                  autoCapitalize="none"
+                  autoComplete={passwordTab === 'signin' ? 'current-password' : 'new-password'}
+                  value={password}
+                  onChangeText={setPassword}
+                  right={<Lock size={15} color={colors.inkFaint} />}
+                  helper={passwordTab === 'signup' ? 'Use 8+ characters with a letter and a number.' : undefined}
+                />
 
                 <Button
-                  label="Send one-time code"
-                  onPress={sendCode}
+                  label={passwordTab === 'signin' ? 'Sign in' : 'Create account'}
+                  onPress={submitPassword}
                   loading={busy}
+                  disabled={!identifier.trim() || password.length === 0}
                   icon={<ArrowRight size={17} color={colors.white} />}
                 />
-              </>
-            ) : (
-              <>
-                <InfoBanner
-                  title={`Demo code for ${pendingOtp?.identifier ?? ''}`}
-                  message={`${pendingOtp?.code ?? '------'} · This build shows the OTP on screen. Connect an SMS or email provider before production.`}
-                  tone="orange"
-                />
-                <View style={{ height: spacing.md }} />
-                <Field
-                  label="Six-digit code"
-                  placeholder="000000"
-                  keyboardType="number-pad"
-                  value={code}
-                  onChangeText={(value) => setCode(value.replace(/[^0-9]/g, '').slice(0, 6))}
-                  maxLength={6}
-                  error={error ?? undefined}
-                  helper="Codes expire after five minutes."
-                />
-                <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-                  <Button
-                    label="Verify & continue"
-                    onPress={verify}
-                    loading={busy}
-                    disabled={code.length !== 6}
-                    style={{ flex: 1 }}
-                  />
-                  <Button
-                    label="Use demo code"
-                    variant="secondary"
-                    size="md"
-                    fullWidth={false}
-                    onPress={() => setCode(pendingOtp?.code ?? '')}
-                  />
-                </View>
-                <Pressable
-                  onPress={() => {
-                    setStage('identifier');
-                    setCode('');
-                    setError(null);
-                  }}
-                  style={{ marginTop: spacing.md, alignSelf: 'center' }}
-                >
-                  <Txt variant="small" color={colors.forest} style={{ fontWeight: '600' }}>
-                    Use a different number or email
+
+                {!cloud.configured ? (
+                  <Txt variant="tiny" color={colors.inkFaint} style={{ marginTop: spacing.sm }}>
+                    Password accounts need a Supabase project. Add the environment keys to enable them.
                   </Txt>
-                </Pressable>
+                ) : null}
               </>
             )}
+
+            {cloud.error ? (
+              <View style={{ marginTop: spacing.md }}>
+                <InfoBanner message={cloud.error} tone="orange" />
+              </View>
+            ) : null}
 
             <View style={styles.dividerRow}>
               <View style={styles.divider} />
@@ -268,7 +452,7 @@ export default function AuthScreen() {
       <Sheet visible={googleSheet} onClose={() => setGoogleSheet(false)} title="Google sign-in">
         <InfoBanner
           title="Configuration required"
-          message="Google OAuth is not connected in this build, so we will not pretend to sign you in. Add GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET and a Firebase or Supabase project to enable it."
+          message="Google OAuth is not connected in this build, so we will not pretend to sign you in. Enable the Google provider in Supabase to add it."
           tone="neutral"
           icon={<ShieldCheck size={16} color={colors.inkSoft} />}
         />
@@ -343,6 +527,21 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     marginBottom: spacing.lg,
   },
+  modeRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.lg,
+    marginBottom: spacing.xs,
+  },
+  modeItem: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.white,
+  },
+  modeActive: { backgroundColor: colors.mint, borderColor: colors.mint },
   segment: {
     flexDirection: 'row',
     backgroundColor: colors.white,

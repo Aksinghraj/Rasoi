@@ -9,6 +9,7 @@ Rasoi is an India-first meal planning and smart grocery app built with Expo and 
 ## What works
 
 - **Phone or email OTP sign-in** with an on-screen demo code (no SMS/email provider required).
+- **Optional cloud accounts** (Supabase): email OTP, email + password sign-in and sign-up, secure session storage and offline-first sync. Without the Supabase keys the app runs in labelled device-only mode.
 - **Demo kitchen** that seeds a household, pantry, favourites and a generated week so every screen has content.
 - **10-step onboarding**: household, diet, allergens, restrictions, dislikes, equipment, budget, meal types, location and review.
 - **Recipe discovery**: search, meal-slot filters, sort, filters, pantry mode, quick mode, budget mode, high-protein mode, favourites and "surprise me".
@@ -25,7 +26,7 @@ Rasoi is an India-first meal planning and smart grocery app built with Expo and 
 - **Custom recipes** with ingredient picker, steps, equipment and estimated nutrition and cost.
 - **Preferences and privacy**: diet/allergen/restriction editing, budget, location, language, consent toggles, JSON export and account deletion.
 - **Demo admin console**: analytics, recipe verification, ingredient master, retailer status and audit log.
-- **Automated engine tests** (55 tests) covering conversions, aggregation, pantry deduction, pack optimisation, allergen safety, planner, account roles, retailer-specific matching, adapter honesty, duplicate-input guards and Android hardening regressions.
+- **Automated tests** (75 tests) covering conversions, aggregation, pantry deduction, pack optimisation, allergen safety, planner, account roles, retailer-specific matching, adapter honesty, duplicate-input guards, Android hardening regressions, Supabase config, auth validation, the sync queue, remote snapshot mapping and the sync engine.
 
 ---
 
@@ -63,7 +64,16 @@ Real sign-in uses a generated 6-digit OTP shown on screen and valid for five min
 
 ### Environment
 
-The demo runs with no secrets. A production deployment would add (server-side only):
+The demo runs with no secrets. Copy `.env` and fill in the optional Supabase values to turn on cloud accounts and sync:
+
+```
+EXPO_PUBLIC_SUPABASE_URL=https://<project>.supabase.co
+EXPO_PUBLIC_SUPABASE_ANON_KEY=<anon key>
+```
+
+Both must be present for cloud mode. Only the public anon key is shipped; authorization is enforced by Postgres Row Level Security. Leave them blank and the app stays fully usable in device-only mode (clearly labelled in the auth and profile screens).
+
+A production deployment would also add, server-side only:
 
 ```
 DATABASE_URL=postgres://…
@@ -72,7 +82,9 @@ RETAILER_CLIENT_ID=…
 RETAILER_CLIENT_SECRET=…
 ```
 
-Never put retailer secrets in the app bundle. Adapters are designed to call a backend proxy.
+Never put retailer secrets or the Supabase service-role key in the app bundle. Adapters are designed to call a backend proxy.
+
+See [`docs/BACKEND.md`](docs/BACKEND.md) for the schema, migration command, auth flows and offline-sync behaviour.
 
 ---
 
@@ -111,8 +123,13 @@ lib/
   data/                    ingredients, recipes, product catalogue
   engine/                  units, allergens, grocery, planner, recommendation
   retailers/adapters.ts    retailer adapter interface and implementations
+  auth/                    local users + cloud auth + validation
+  supabase/                config, secure storage and client singleton
+  sync/                    row mapping, offline queue, sync engine, repository
   store/AppContext.tsx     persistence, auth, plans, pantry, cooking, audit
+supabase/migrations/       PostgreSQL schema + Row Level Security
 tests/engine.test.ts       engine and adapter tests
+tests/cloud.test.ts        config, auth, queue, row-mapping and sync tests
 ```
 
 ### Data flow
@@ -123,6 +140,7 @@ UI action
   → engine (planner / grocery / recommendation / allergens)
   → state persisted to AsyncStorage (debounced 250 ms)
   → screens re-render from context
+  → (cloud mode) change queued → pushed to Supabase → canonical rows pulled back
 ```
 
 Engines are pure functions over plain data. That keeps the important logic testable without React Native, which is why `lib/categories.ts` exists separately from `lib/theme.ts`.
@@ -138,6 +156,8 @@ Engines are pure functions over plain data. That keeps the important logic testa
 ---
 
 ## Backend migration boundary
+
+A first cloud backend is now implemented as an **optional** Supabase layer (`lib/supabase/`, `lib/sync/`, `supabase/migrations/`). It activates only when the public Supabase env vars are set; otherwise the app stays in device-only mode. See [`docs/BACKEND.md`](docs/BACKEND.md). The table below describes the remaining production boundary:
 
 The demo intentionally keeps state in AsyncStorage so the whole product can be exercised without infrastructure. Production work should replace the persistence, authentication and retailer-network boundary without changing screens or engines:
 

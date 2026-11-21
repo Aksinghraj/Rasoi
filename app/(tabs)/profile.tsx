@@ -5,13 +5,17 @@ import { useRouter } from 'expo-router';
 import {
   Bell,
   BookOpen,
+  CheckCircle2,
   ChevronRight,
+  Cloud,
+  CloudOff,
   Download,
   Heart,
   HelpCircle,
   Languages,
   LogOut,
   Package,
+  RefreshCw,
   Settings,
   Shield,
   ShieldCheck,
@@ -49,6 +53,8 @@ export default function ProfileScreen() {
     updateProfile,
     updateHousehold,
     updateNotifications,
+    cloud,
+    syncNow,
     signOut,
     deleteAccount,
     exportData,
@@ -92,6 +98,46 @@ export default function ProfileScreen() {
     setDeleteOpen(false);
     router.replace('/auth');
   };
+
+  const isDemo = state.user?.authMethod === 'demo';
+  const cloudTitle = isDemo
+    ? 'Demo kitchen'
+    : !cloud.configured
+      ? 'Cloud sync off'
+      : cloud.status === 'syncing' || cloud.status === 'connecting'
+        ? 'Syncing your kitchen…'
+        : cloud.status === 'offline'
+          ? 'Offline — changes saved here'
+          : cloud.status === 'error'
+            ? 'Sync needs attention'
+            : cloud.status === 'synced'
+              ? 'Synced to the cloud'
+              : cloud.userId
+                ? 'Signed in to the cloud'
+                : 'Not signed in to the cloud';
+  const cloudDetail = isDemo
+    ? 'This demo stays on this device. Sign in to sync a real kitchen.'
+    : !cloud.configured
+      ? 'Your kitchen is stored on this device. Add Supabase keys to enable sync.'
+      : cloud.status === 'offline'
+        ? 'We will retry automatically when you are back online.'
+        : cloud.status === 'error'
+          ? cloud.error ?? 'Your changes are safe on this device. Tap to retry.'
+          : cloud.status === 'synced' && cloud.lastSyncedAt
+            ? `Last synced ${relativeTime(cloud.lastSyncedAt)}`
+            : cloud.pending
+              ? 'Changes waiting to upload.'
+              : cloud.email ?? 'Sign in to sync across devices.';
+  const cloudIcon =
+    cloud.status === 'synced' ? (
+      <CheckCircle2 size={18} color={colors.forest} />
+    ) : cloud.status === 'offline' || cloud.status === 'error' ? (
+      <CloudOff size={18} color={colors.forest} />
+    ) : cloud.status === 'syncing' || cloud.status === 'connecting' ? (
+      <RefreshCw size={18} color={colors.forest} />
+    ) : (
+      <Cloud size={18} color={colors.forest} />
+    );
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.cream }} edges={['top']}>
@@ -161,6 +207,37 @@ export default function ProfileScreen() {
               <InfoBanner message={notice} tone="mint" />
             </View>
           ) : null}
+
+          <Card>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <View style={styles.sectionIcon}>{cloudIcon}</View>
+              <View style={{ flex: 1, marginLeft: spacing.sm }}>
+                <Txt variant="bodyStrong">{cloudTitle}</Txt>
+                <Txt variant="tiny" color={colors.inkSoft}>
+                  {cloudDetail}
+                </Txt>
+              </View>
+              {!isDemo && cloud.userId && cloud.status !== 'syncing' ? (
+                <Pressable
+                  onPress={() => {
+                    void syncNow();
+                  }}
+                  style={styles.editButton}
+                  accessibilityLabel="Sync now"
+                >
+                  <RefreshCw size={16} color={colors.forest} />
+                </Pressable>
+              ) : null}
+            </View>
+            {cloud.error && cloud.status !== 'error' ? (
+              <>
+                <Divider />
+                <Txt variant="tiny" color={colors.inkSoft}>
+                  {cloud.error}
+                </Txt>
+              </>
+            ) : null}
+          </Card>
 
           <Card>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
