@@ -11,43 +11,69 @@ Rasoi works fully offline. Cloud accounts are **optional** and activate only whe
 
 The app never pretends a cloud feature is available when it is not configured.
 
-## Environment
+## Exact setup steps
 
-Add to `.env` (already scaffolded):
+1. **Create the project.** In the Supabase dashboard choose *New project*, pick a region close to your users and set a database password you store in your own password manager.
+2. **Copy the client keys.** Go to *Project settings → API*. Copy:
+   - *Project URL* → `EXPO_PUBLIC_SUPABASE_URL`
+   - *Project API keys → anon public* → `EXPO_PUBLIC_SUPABASE_ANON_KEY`
+   Do **not** copy the `service_role` key into the app.
+3. **Configure email auth.** Go to *Authentication → Providers → Email*:
+   - Enable *Email*.
+   - For one-time codes, enable *Email OTP* (Supabase sends the six-digit code used by `sendEmailCode`).
+   - For password accounts, decide whether *Confirm email* is on. If it is, `signUpWithPassword` returns `needsConfirmation` and the user must confirm before signing in.
+   - Under *Authentication → URL configuration*, add your app's redirect/deep-link URL if you enable email confirmation links.
+4. **Apply the schema.** Either:
+   ```bash
+   supabase link --project-ref <project-ref>
+   supabase db push
+   ```
+   or paste `supabase/migrations/0001_init.sql` into the *SQL editor* and run it. The migration is idempotent and safe to re-run.
+5. **Create `.env`.** Copy the template and fill in the two public values:
+   ```bash
+   cp .env.example .env
+   ```
+   ```
+   EXPO_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co
+   EXPO_PUBLIC_SUPABASE_ANON_KEY=<anon public key>
+   ```
+6. **Restart the Expo dev server** so the new `EXPO_PUBLIC_*` values are inlined.
+7. **Verify.** Open the app → *Sign in* → choose *Password* or an email one-time code. Then open *Profile*: the sync card should read **Synced to the cloud** with a recent timestamp. In the Supabase dashboard, *Table editor* should show rows in `profiles`, `households`, `preferences`, `meal_plans`, `planned_meals` and `grocery_lists`.
+8. **Confirm isolation.** Sign in as a second account and check that neither account can see the other's rows. RLS is the enforcement point; the app also scopes every query by `user_id`.
 
-```
-EXPO_PUBLIC_SUPABASE_URL=https://<project>.supabase.co
-EXPO_PUBLIC_SUPABASE_ANON_KEY=<anon key>
-```
+### Environment rules
 
 - Only the **anon** key is public. Never ship the service-role key in the app.
 - The URL must be `https://` (or `http://localhost` for local Supabase).
 - Config is read by `lib/supabase/config.ts`; an invalid URL or a key shorter than 20 characters is treated as "not configured".
-
-## Apply the schema
-
-The migration lives at `supabase/migrations/0001_init.sql`. Apply it with either:
-
-```bash
-# Supabase CLI (linked project)
-supabase db push
-
-# or directly
-psql "$DATABASE_URL" -f supabase/migrations/0001_init.sql
-```
-
-The migration is idempotent (`create table if not exists`, `create or replace function`) and safe to re-run after a partial failure.
+- `.env` is git-ignored; `.env.example` is committed with placeholders.
 
 ### Tables
 
-`profiles`, `households`, `preferences`, `meal_plans`, `pantry_items`, `grocery_extras`, `custom_recipes`, `favorites`, `orders`, `audit_logs`, `user_settings`.
+| Table | Purpose | Key |
+| --- | --- | --- |
+| `profiles` | name, phone, email, auth method, admin flag | `id` (= auth user) |
+| `households` | adults, children, default servings, members | `user_id` |
+| `preferences` | diet, allergens, budget, location, equipment | `user_id` |
+| `meal_plans` | plan name, start date, ordered day dates | `(user_id, id)` |
+| `planned_meals` | one row per meal: plan, date, slot, recipe, servings, cooked | `(user_id, id)` |
+| `pantry_items` | ingredient, quantity, unit, expiry, staple | `(user_id, id)` |
+| `grocery_extras` | manual grocery additions | `(user_id, id)` |
+| `grocery_lists` | working list state (checked items, active plan) | `(user_id, id)` |
+| `custom_recipes` | user-created recipes | `(user_id, id)` |
+| `favorites` | saved recipe ids | `(user_id, recipe_id)` |
+| `orders` | retailer hand-off / sandbox order records | `(user_id, id)` |
+| `audit_logs` | per-account activity trail | `(user_id, id)` |
+| `user_settings` | notifications, consents, cooking state | `user_id` |
 
-Every row is scoped by `user_id` (or `id` for `profiles`).
+Every row is scoped by `user_id` (or `id` for `profiles`). Plan days are stored as flat `planned_meals` rows so they can be queried and counted; `meal_plans.day_dates` preserves blank days in the week.
 
 ### Authorization
 
 - Row Level Security is enabled on every table.
-- Policies allow a signed-in user to select/insert/update/delete only rows where `auth.uid()` matches.
+- Every table has separate select/insert/update/delete policies using `auth.uid() = user_id` (or `= id` for `profiles`); inserts also use `with check`.
+- `planned_meals` is additionally constrained to a plan the same user owns through a composite foreign key.
+- The client never checks a role to authorize a write; the database decides.
 - `profiles.is_admin` is **server-owned**. The `protect_profile_fields` trigger resets `is_admin`, `id`, `email` and `auth_method` on any client update unless the request uses the service role.
 - `handle_new_user` creates a profile row whenever Supabase Auth creates a user.
 - Grants are given to `authenticated`; access is revoked from `anon`.

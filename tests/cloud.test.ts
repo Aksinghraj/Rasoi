@@ -25,6 +25,7 @@ import {
   toRemoteSnapshot,
 } from '@/lib/sync/rows';
 import { describeSyncError, runSync } from '@/lib/sync/engine';
+import { cloudAccountToProfile } from '@/lib/auth/profile';
 import { createEmptyData, defaultPreferences } from '@/lib/store/defaults';
 import { AppData, UserProfile } from '@/lib/types';
 
@@ -54,6 +55,35 @@ function sampleState(overrides: Partial<AppData> = {}): AppData {
       { id: 'p1', ingredientId: 'rice', quantity: 2, unit: 'kg', staple: true, addedAt: '2026-01-01T00:00:00.000Z' },
     ],
     favorites: ['paneer-butter-masala'],
+    plans: [
+      {
+        id: 'plan-1',
+        name: 'Week one',
+        startDate: '2026-01-05',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        source: 'manual',
+        days: [
+          {
+            date: '2026-01-05',
+            meals: {
+              breakfast: [{ id: 'meal-1', recipeId: 'vegetable-poha', servings: 3 }],
+              lunch: [],
+              dinner: [
+                { id: 'meal-2', recipeId: 'palak-paneer', servings: 4 },
+                { id: 'meal-3', recipeId: 'lemon-rice', servings: 2, cooked: true },
+              ],
+              snack: [],
+            },
+          },
+          {
+            date: '2026-01-06',
+            meals: { breakfast: [], lunch: [], dinner: [], snack: [] },
+          },
+        ],
+      },
+    ],
+    activePlanId: 'plan-1',
+    checkedItems: { 'paneer:g': true },
     ...overrides,
   };
 }
@@ -145,6 +175,45 @@ describe('auth validation', () => {
   });
 });
 
+describe('cloud account mapping', () => {
+  test('never grants admin from an auth account', () => {
+    const profile = cloudAccountToProfile({
+      id: USER_ID,
+      email: 'Meera@Example.com',
+      phone: null,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      name: 'Meera',
+    });
+    expect(profile.isAdmin).toBe(false);
+    expect(profile.email).toBe('meera@example.com');
+    expect(profile.authMethod).toBe('email');
+    expect(profile.id).toBe(USER_ID);
+  });
+
+  test('uses the phone method only when there is no email', () => {
+    const phoneOnly = cloudAccountToProfile({
+      id: USER_ID,
+      email: null,
+      phone: '9876543210',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      name: null,
+    });
+    expect(phoneOnly.authMethod).toBe('phone');
+    expect(phoneOnly.name).toBe('Rasoi cook');
+  });
+
+  test('derives a readable name from the email local part', () => {
+    const profile = cloudAccountToProfile({
+      id: USER_ID,
+      email: 'meera.rao@example.com',
+      phone: null,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      name: null,
+    });
+    expect(profile.name).toBe('meera rao');
+  });
+});
+
 describe('sync queue', () => {
   test('coalesces pending changes without resetting the first timestamp', () => {
     const first = enqueue(emptyQueue, '2026-01-01T00:00:00.000Z');
@@ -203,6 +272,20 @@ describe('remote snapshot mapping', () => {
     expect(snapshot.household?.user_id).toBe(USER_ID);
     expect(snapshot.pantry[0].user_id).toBe(USER_ID);
     expect(snapshot.favorites[0]).toEqual({ user_id: USER_ID, recipe_id: 'paneer-butter-masala' });
+    expect(snapshot.plannedMeals).toHaveLength(3);
+    expect(snapshot.plannedMeals.every((meal) => meal.user_id === USER_ID)).toBe(true);
+    expect(snapshot.plannedMeals.every((meal) => meal.plan_id === 'plan-1')).toBe(true);
+    expect(snapshot.groceryList?.checked_items).toEqual({ 'paneer:g': true });
+    expect(snapshot.groceryList?.plan_id).toBe('plan-1');
+  });
+
+  test('stores plan days as flat meals, not a JSON blob', () => {
+    const snapshot = toRemoteSnapshot(sampleState(), USER_ID);
+    expect('days' in (snapshot.plans[0] as object)).toBe(false);
+    const dinner = snapshot.plannedMeals.filter((meal) => meal.slot === 'dinner');
+    expect(dinner.map((meal) => meal.recipe_id)).toEqual(['palak-paneer', 'lemon-rice']);
+    expect(dinner.map((meal) => meal.position)).toEqual([0, 1]);
+    expect(dinner[1].cooked).toBe(true);
   });
 
   test('round-trips kitchen data without losing values', () => {
@@ -216,6 +299,46 @@ describe('remote snapshot mapping', () => {
     expect(restored.pantry[0].ingredientId).toBe('rice');
     expect(restored.favorites).toEqual(['paneer-butter-masala']);
     expect(restored.session?.userId).toBe(USER_ID);
+    expect(restored.plans).toHaveLength(1);
+    expect(restored.plans[0].days).toHaveLength(2);
+    expect(restored.plans[0].days[0].meals.breakfast[0].recipeId).toBe('vegetable-poha');
+    expect(restored.plans[0].days[0].meals.dinner.map((meal) => meal.id)).toEqual(['meal-2', 'meal-3']);
+    expect(restored.plans[0].days[0].meals.dinner[1].cooked).toBe(true);
+    expect(restored.plans[0].days[1].meals.dinner).toEqual([]);
+    expect(restored.checkedItems).toEqual({ 'paneer:g': true });
+    expect(restored.activePlanId).toBe('plan-1');
+  });
+
+  test('keeps declared blank days and does not invent meals', () => {
+    const state = sampleState();
+    const snapshot = toRemoteSnapshot(state, USER_ID);
+    const cleared = { ...snapshot, plannedMeals: [] };
+    const restored = fromRemoteSnapshot(cleared, state);
+    expect(restored.plans[0].days.map((day) => day.date)).toEqual(['2026-01-05', '2026-01-06']);
+    expect(restored.plans[0].days[0].meals.dinner).toEqual([]);
+  });
+
+  test('falls back to local days for legacy rows without day dates', () => {
+    const state = sampleState();
+    const snapshot = toRemoteSnapshot(state, USER_ID);
+    const legacy = {
+      ...snapshot,
+      plannedMeals: [],
+      plans: snapshot.plans.map((plan) => ({ ...plan, day_dates: [] })),
+    };
+    const restored = fromRemoteSnapshot(legacy, state);
+    expect(restored.plans[0].days).toHaveLength(2);
+    expect(restored.plans[0].days[0].meals.dinner).toHaveLength(2);
+  });
+
+  test('ignores an admin flag on a cloud profile row', () => {
+    const snapshot = toRemoteSnapshot(sampleState(), USER_ID);
+    const tampered = {
+      ...snapshot,
+      profile: snapshot.profile ? { ...snapshot.profile, is_admin: true } : null,
+    };
+    const restored = fromRemoteSnapshot(tampered, createEmptyData());
+    expect(restored.user?.isAdmin).toBe(false);
   });
 
   test('detects whether the cloud already holds data', () => {

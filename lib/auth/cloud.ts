@@ -1,5 +1,6 @@
 import type { Session, User } from '@supabase/supabase-js';
 import { getSupabase } from '@/lib/supabase/client';
+import { cloudAccountToProfile, CloudAccount } from '@/lib/auth/profile';
 import { UserProfile } from '@/lib/types';
 import {
   isNetworkError,
@@ -9,6 +10,9 @@ import {
   passwordProblem,
 } from '@/lib/auth/validation';
 
+export type { CloudAccount } from '@/lib/auth/profile';
+export { cloudAccountToProfile } from '@/lib/auth/profile';
+
 export interface CloudResult<T = undefined> {
   ok: boolean;
   error?: string;
@@ -17,14 +21,6 @@ export interface CloudResult<T = undefined> {
   needsConfirmation?: boolean;
   /** The failure was a transport problem, so the local queue should retry. */
   offline?: boolean;
-}
-
-export interface CloudAccount {
-  id: string;
-  email: string | null;
-  phone: string | null;
-  createdAt: string;
-  name: string | null;
 }
 
 const NOT_CONFIGURED =
@@ -45,21 +41,6 @@ function accountFromUser(user: User): CloudAccount {
     phone: user.phone ?? null,
     createdAt: user.created_at ?? new Date().toISOString(),
     name,
-  };
-}
-
-export function cloudAccountToProfile(account: CloudAccount, fallbackName?: string): UserProfile {
-  const email = account.email ? normalizeEmail(account.email) : undefined;
-  const fallback = email ? email.split('@')[0].replace(/[._-]/g, ' ') : 'Rasoi cook';
-  return {
-    id: account.id,
-    name: account.name ?? (fallbackName?.trim() || fallback),
-    email,
-    phone: account.phone ?? undefined,
-    authMethod: account.phone && !account.email ? 'phone' : 'email',
-    createdAt: account.createdAt,
-    // Roles are owned by the server. A self-service account is never admin.
-    isAdmin: false,
   };
 }
 

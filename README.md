@@ -26,7 +26,7 @@ Rasoi is an India-first meal planning and smart grocery app built with Expo and 
 - **Custom recipes** with ingredient picker, steps, equipment and estimated nutrition and cost.
 - **Preferences and privacy**: diet/allergen/restriction editing, budget, location, language, consent toggles, JSON export and account deletion.
 - **Demo admin console**: analytics, recipe verification, ingredient master, retailer status and audit log.
-- **Automated tests** (75 tests) covering conversions, aggregation, pantry deduction, pack optimisation, allergen safety, planner, account roles, retailer-specific matching, adapter honesty, duplicate-input guards, Android hardening regressions, Supabase config, auth validation, the sync queue, remote snapshot mapping and the sync engine.
+- **Automated tests** (94 tests) covering conversions, aggregation, pantry deduction, pack optimisation, allergen safety, planner, account roles, retailer-specific matching, adapter honesty, duplicate-input guards, Android hardening regressions, Supabase config, auth validation and account mapping, the sync queue, remote snapshot mapping, the sync engine, and schema/RLS assumptions parsed from the migration.
 
 ---
 
@@ -64,7 +64,7 @@ Real sign-in uses a generated 6-digit OTP shown on screen and valid for five min
 
 ### Environment
 
-The demo runs with no secrets. Copy `.env` and fill in the optional Supabase values to turn on cloud accounts and sync:
+The demo runs with no secrets. Copy `.env.example` to `.env` and fill in the optional Supabase values to turn on cloud accounts and sync:
 
 ```
 EXPO_PUBLIC_SUPABASE_URL=https://<project>.supabase.co
@@ -84,7 +84,9 @@ RETAILER_CLIENT_SECRET=…
 
 Never put retailer secrets or the Supabase service-role key in the app bundle. Adapters are designed to call a backend proxy.
 
-See [`docs/BACKEND.md`](docs/BACKEND.md) for the schema, migration command, auth flows and offline-sync behaviour.
+`.env` is git-ignored; `.env.example` is committed. Only the public anon key is ever read by the app, and the service-role key is never bundled.
+
+See [`docs/BACKEND.md`](docs/BACKEND.md) for exact Supabase setup steps, the full table list, RLS policies, auth flows and offline-sync behaviour.
 
 ---
 
@@ -188,6 +190,10 @@ The demo intentionally keeps state in AsyncStorage so the whole product can be e
 ---
 
 ## Production database schema (PostgreSQL)
+
+> **Implemented:** the Supabase schema that ships with the app is `supabase/migrations/0001_init.sql` — see [`docs/BACKEND.md`](docs/BACKEND.md). It creates `profiles`, `households`, `preferences`, `meal_plans`, `planned_meals`, `pantry_items`, `grocery_extras`, `grocery_lists`, `custom_recipes`, `favorites`, `orders`, `audit_logs` and `user_settings`, all under Row Level Security.
+>
+> The block below is the earlier, broader design sketch for a custom backend (including an OTP/session service and the recipe catalogue). It is kept for reference; where the two differ, the migration is authoritative.
 
 The demo uses AsyncStorage. A production backend would use PostgreSQL. Suggested schema:
 

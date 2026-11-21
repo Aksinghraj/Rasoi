@@ -8,10 +8,12 @@ import {
   Household,
   HouseholdMember,
   MealPlan,
+  MealSlot,
   NotificationSettings,
   OrderRecord,
   PantryItem,
   PlanDay,
+  PlannedMeal,
   Preferences,
   Recipe,
   UserProfile,
@@ -48,8 +50,30 @@ export interface MealPlanRow {
   user_id: string;
   name: string;
   start_date: string;
-  days: PlanDay[];
+  day_dates: string[];
   source: MealPlan['source'];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PlannedMealRow {
+  id: string;
+  user_id: string;
+  plan_id: string;
+  meal_date: string;
+  slot: MealSlot;
+  recipe_id: string;
+  servings: number;
+  cooked: boolean;
+  position: number;
+  updated_at: string;
+}
+
+export interface GroceryListRow {
+  id: string;
+  user_id: string;
+  plan_id: string | null;
+  checked_items: Record<string, boolean>;
   created_at: string;
   updated_at: string;
 }
@@ -116,7 +140,6 @@ export interface SettingsRow {
   active_plan_id: string | null;
   recent_recipe_ids: string[];
   verified_recipe_ids: string[];
-  checked_items: Record<string, boolean>;
   cooking: CookingSession | null;
   cooking_history: { recipeId: string; completedAt: string }[];
   updated_at: string;
@@ -128,6 +151,8 @@ export interface RemoteSnapshot {
   preferences: PreferencesRow | null;
   settings: SettingsRow | null;
   plans: MealPlanRow[];
+  plannedMeals: PlannedMealRow[];
+  groceryList: GroceryListRow | null;
   pantry: PantryRow[];
   extras: ExtraRow[];
   customRecipes: CustomRecipeRow[];
@@ -142,6 +167,8 @@ export const emptyRemoteSnapshot: RemoteSnapshot = {
   preferences: null,
   settings: null,
   plans: [],
+  plannedMeals: [],
+  groceryList: null,
   pantry: [],
   extras: [],
   customRecipes: [],
@@ -149,6 +176,8 @@ export const emptyRemoteSnapshot: RemoteSnapshot = {
   orders: [],
   auditLogs: [],
 };
+
+const MEAL_SLOTS: MealSlot[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 
 function asArray<T>(value: unknown): T[] {
   return Array.isArray(value) ? (value as T[]) : [];
@@ -207,7 +236,6 @@ export function toRemoteSnapshot(
     active_plan_id: state.activePlanId,
     recent_recipe_ids: state.recentRecipeIds,
     verified_recipe_ids: state.verifiedRecipeIds,
-    checked_items: state.checkedItems,
     cooking: state.cooking,
     cooking_history: state.cookingHistory,
     updated_at: now,
@@ -223,11 +251,37 @@ export function toRemoteSnapshot(
       user_id: userId,
       name: plan.name,
       start_date: plan.startDate,
-      days: plan.days,
+      day_dates: plan.days.map((day) => day.date),
       source: plan.source,
       created_at: plan.createdAt,
       updated_at: now,
     })),
+    plannedMeals: state.plans.flatMap((plan) =>
+      plan.days.flatMap((day) =>
+        MEAL_SLOTS.flatMap((slot) =>
+          (day.meals[slot] ?? []).map((meal, position) => ({
+            id: meal.id,
+            user_id: userId,
+            plan_id: plan.id,
+            meal_date: day.date,
+            slot,
+            recipe_id: meal.recipeId,
+            servings: meal.servings,
+            cooked: meal.cooked === true,
+            position,
+            updated_at: now,
+          })),
+        ),
+      ),
+    ),
+    groceryList: {
+      id: 'active',
+      user_id: userId,
+      plan_id: state.activePlanId,
+      checked_items: state.checkedItems,
+      created_at: state.createdAt,
+      updated_at: now,
+    },
     pantry: state.pantry.map((item) => ({
       id: item.id,
       user_id: userId,
@@ -301,12 +355,68 @@ function householdFromRow(row: HouseholdRow): Household {
   };
 }
 
-function planFromRow(row: MealPlanRow): MealPlan {
+function emptyMeals(): Record<MealSlot, PlannedMeal[]> {
+  return { breakfast: [], lunch: [], dinner: [], snack: [] };
+}
+
+function normalizeSlot(value: unknown): MealSlot | null {
+  return typeof value === 'string' && (MEAL_SLOTS as string[]).includes(value)
+    ? (value as MealSlot)
+    : null;
+}
+
+/**
+ * Rebuilds a plan's day structure from flat meal rows. Days appear in the order
+ * the meal rows name them; slots are always all four so the planner stays sane.
+ */
+function daysFromMeals(
+  planId: string,
+  dayDates: unknown,
+  rows: PlannedMealRow[],
+  fallback: PlanDay[],
+): PlanDay[] {
+  const planRows = rows.filter((row) => row.plan_id === planId);
+  const declared = Array.isArray(dayDates) ? dayDates.filter(isDateString) : [];
+  if (!planRows.length && !declared.length) return fallback;
+
+  const byDate = new Map<string, PlanDay>();
+  for (const date of declared) {
+    byDate.set(date, { date, meals: emptyMeals() });
+  }
+
+  const ordered = [...planRows].sort((a, b) =>
+    a.meal_date === b.meal_date ? a.position - b.position : a.meal_date < b.meal_date ? -1 : 1,
+  );
+
+  for (const row of ordered) {
+    const slot = normalizeSlot(row.slot);
+    if (!slot || !isDateString(row.meal_date)) continue;
+    const day = byDate.get(row.meal_date) ?? { date: row.meal_date, meals: emptyMeals() };
+    day.meals[slot].push({
+      id: row.id,
+      recipeId: row.recipe_id,
+      servings: Number.isFinite(row.servings) ? Math.max(1, Math.round(row.servings)) : 1,
+      ...(row.cooked === true ? { cooked: true } : {}),
+    });
+    byDate.set(row.meal_date, day);
+  }
+
+  const days = [...byDate.values()].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  return days.length ? days : fallback;
+}
+
+function isDateString(value: unknown): value is string {
+  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+function planFromRow(row: MealPlanRow, fallbackDays: PlanDay[]): MealPlan {
   return {
     id: row.id,
     name: stringOr(row.name, 'Saved week'),
-    startDate: stringOr(row.start_date, new Date().toISOString().slice(0, 10)),
-    days: asArray<PlanDay>(row.days),
+    startDate: isDateString(row.start_date)
+      ? row.start_date
+      : new Date().toISOString().slice(0, 10),
+    days: fallbackDays,
     createdAt: stringOr(row.created_at, new Date().toISOString()),
     source: row.source === 'demo' || row.source === 'generated' ? row.source : 'manual',
   };
@@ -334,7 +444,17 @@ export function fromRemoteSnapshot(snapshot: RemoteSnapshot, base: AppData): App
     user,
     household,
     preferences,
-    plans: snapshot.plans.map(planFromRow),
+    plans: snapshot.plans.map((row) =>
+      planFromRow(
+        row,
+        daysFromMeals(
+          row.id,
+          row.day_dates,
+          snapshot.plannedMeals,
+          base.plans.find((plan) => plan.id === row.id)?.days ?? [],
+        ),
+      ),
+    ),
     pantry: snapshot.pantry.map((row) => ({
       id: row.id,
       ingredientId: row.ingredient_id,
@@ -383,9 +503,11 @@ export function fromRemoteSnapshot(snapshot: RemoteSnapshot, base: AppData): App
     verifiedRecipeIds: Array.isArray(settings?.verified_recipe_ids)
       ? settings.verified_recipe_ids
       : base.verifiedRecipeIds,
-    checkedItems: settings?.checked_items && typeof settings.checked_items === 'object'
+    checkedItems: snapshot.groceryList?.checked_items
       ? Object.fromEntries(
-          Object.entries(settings.checked_items).filter(([, value]) => typeof value === 'boolean'),
+          Object.entries(snapshot.groceryList.checked_items).filter(
+            ([, value]) => typeof value === 'boolean',
+          ),
         )
       : base.checkedItems,
     cooking: settings?.cooking ?? null,
@@ -401,6 +523,8 @@ export function hasRemoteData(snapshot: RemoteSnapshot): boolean {
     snapshot.household ||
       snapshot.preferences ||
       snapshot.plans.length ||
+      snapshot.plannedMeals.length ||
+      snapshot.groceryList !== null ||
       snapshot.pantry.length ||
       snapshot.extras.length ||
       snapshot.customRecipes.length ||

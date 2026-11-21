@@ -5,10 +5,12 @@ import {
   CustomRecipeRow,
   ExtraRow,
   FavoriteRow,
+  GroceryListRow,
   HouseholdRow,
   MealPlanRow,
   OrderRow,
   PantryRow,
+  PlannedMealRow,
   PreferencesRow,
   ProfileRow,
   RemoteSnapshot,
@@ -139,6 +141,14 @@ export class SupabaseSyncRepository implements SyncRepository {
     }
 
     await this.replaceRows<MealPlanRow>('meal_plans', snapshot.plans);
+    await this.replaceRows<PlannedMealRow>('planned_meals', snapshot.plannedMeals);
+    if (snapshot.groceryList) {
+      const groceryList = { ...snapshot.groceryList, user_id: this.userId };
+      const { error } = await this.client
+        .from('grocery_lists')
+        .upsert(groceryList, { onConflict: 'user_id,id' });
+      raise(error);
+    }
     await this.replaceRows<PantryRow>('pantry_items', snapshot.pantry);
     await this.replaceRows<ExtraRow>('grocery_extras', snapshot.extras);
     await this.replaceRows<CustomRecipeRow>('custom_recipes', snapshot.customRecipes);
@@ -154,6 +164,8 @@ export class SupabaseSyncRepository implements SyncRepository {
       preferences,
       settings,
       plans,
+      plannedMeals,
+      groceryList,
       pantry,
       extras,
       customRecipes,
@@ -166,6 +178,13 @@ export class SupabaseSyncRepository implements SyncRepository {
       this.client.from('preferences').select('*').eq('user_id', this.userId).maybeSingle(),
       this.client.from('user_settings').select('*').eq('user_id', this.userId).maybeSingle(),
       this.client.from('meal_plans').select('*').eq('user_id', this.userId).order('start_date', { ascending: false }),
+      this.client
+        .from('planned_meals')
+        .select('*')
+        .eq('user_id', this.userId)
+        .order('meal_date', { ascending: true })
+        .order('position', { ascending: true }),
+      this.client.from('grocery_lists').select('*').eq('user_id', this.userId).eq('id', 'active').maybeSingle(),
       this.client.from('pantry_items').select('*').eq('user_id', this.userId),
       this.client.from('grocery_extras').select('*').eq('user_id', this.userId),
       this.client.from('custom_recipes').select('*').eq('user_id', this.userId),
@@ -174,7 +193,7 @@ export class SupabaseSyncRepository implements SyncRepository {
       this.client.from('audit_logs').select('*').eq('user_id', this.userId).order('at', { ascending: false }),
     ]);
 
-    for (const result of [profile, household, preferences, settings, plans, pantry, extras, customRecipes, favorites, orders, auditLogs]) {
+    for (const result of [profile, household, preferences, settings, plans, plannedMeals, groceryList, pantry, extras, customRecipes, favorites, orders, auditLogs]) {
       raise(result.error);
     }
 
@@ -184,6 +203,8 @@ export class SupabaseSyncRepository implements SyncRepository {
       preferences: (preferences.data as PreferencesRow | null) ?? null,
       settings: (settings.data as SettingsRow | null) ?? null,
       plans: (plans.data as MealPlanRow[] | null) ?? [],
+      plannedMeals: (plannedMeals.data as PlannedMealRow[] | null) ?? [],
+      groceryList: (groceryList.data as GroceryListRow | null) ?? null,
       pantry: (pantry.data as PantryRow[] | null) ?? [],
       extras: (extras.data as ExtraRow[] | null) ?? [],
       customRecipes: (customRecipes.data as CustomRecipeRow[] | null) ?? [],

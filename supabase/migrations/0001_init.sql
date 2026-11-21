@@ -189,7 +189,8 @@ create table if not exists public.meal_plans (
   user_id uuid not null references auth.users (id) on delete cascade,
   name text not null check (char_length(name) between 1 and 120),
   start_date date not null,
-  days jsonb not null default '[]'::jsonb check (jsonb_typeof(days) = 'array'),
+  -- Ordered dates keep blank days in the week even though meals are separate rows.
+  day_dates date[] not null default '{}',
   source text not null default 'manual' check (source in ('generated', 'manual', 'demo')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -217,6 +218,50 @@ create policy "meal_plans_delete_own" on public.meal_plans
 drop trigger if exists meal_plans_touch_updated_at on public.meal_plans;
 create trigger meal_plans_touch_updated_at
   before update on public.meal_plans
+  for each row execute function public.touch_updated_at();
+
+-- One row per planned meal. Plan days are rebuilt from these rows on the
+-- client, so a meal can be queried, reordered or counted without parsing JSON.
+create table if not exists public.planned_meals (
+  id text not null,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  plan_id text not null,
+  meal_date date not null,
+  slot text not null check (slot in ('breakfast', 'lunch', 'dinner', 'snack')),
+  recipe_id text not null,
+  servings integer not null check (servings between 1 and 50),
+  cooked boolean not null default false,
+  position integer not null default 0,
+  updated_at timestamptz not null default now(),
+  primary key (user_id, id),
+  constraint planned_meals_plan_fk
+    foreign key (user_id, plan_id)
+    references public.meal_plans (user_id, id)
+    on delete cascade
+);
+
+create index if not exists planned_meals_user_plan_idx
+  on public.planned_meals (user_id, plan_id, meal_date, slot);
+
+alter table public.planned_meals enable row level security;
+
+drop policy if exists "planned_meals_select_own" on public.planned_meals;
+create policy "planned_meals_select_own" on public.planned_meals
+  for select using ((select auth.uid()) = user_id);
+drop policy if exists "planned_meals_insert_own" on public.planned_meals;
+create policy "planned_meals_insert_own" on public.planned_meals
+  for insert with check ((select auth.uid()) = user_id);
+drop policy if exists "planned_meals_update_own" on public.planned_meals;
+create policy "planned_meals_update_own" on public.planned_meals
+  for update using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
+drop policy if exists "planned_meals_delete_own" on public.planned_meals;
+create policy "planned_meals_delete_own" on public.planned_meals
+  for delete using ((select auth.uid()) = user_id);
+
+drop trigger if exists planned_meals_touch_updated_at on public.planned_meals;
+create trigger planned_meals_touch_updated_at
+  before update on public.planned_meals
   for each row execute function public.touch_updated_at();
 
 create table if not exists public.pantry_items (
@@ -287,6 +332,39 @@ create policy "grocery_extras_delete_own" on public.grocery_extras
 drop trigger if exists grocery_extras_touch_updated_at on public.grocery_extras;
 create trigger grocery_extras_touch_updated_at
   before update on public.grocery_extras
+  for each row execute function public.touch_updated_at();
+
+-- The working grocery list. `id` is 'active' today; the composite key leaves
+-- room for saved lists per plan without another migration.
+create table if not exists public.grocery_lists (
+  id text not null,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  plan_id text,
+  checked_items jsonb not null default '{}'::jsonb check (jsonb_typeof(checked_items) = 'object'),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (user_id, id)
+);
+
+alter table public.grocery_lists enable row level security;
+
+drop policy if exists "grocery_lists_select_own" on public.grocery_lists;
+create policy "grocery_lists_select_own" on public.grocery_lists
+  for select using ((select auth.uid()) = user_id);
+drop policy if exists "grocery_lists_insert_own" on public.grocery_lists;
+create policy "grocery_lists_insert_own" on public.grocery_lists
+  for insert with check ((select auth.uid()) = user_id);
+drop policy if exists "grocery_lists_update_own" on public.grocery_lists;
+create policy "grocery_lists_update_own" on public.grocery_lists
+  for update using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
+drop policy if exists "grocery_lists_delete_own" on public.grocery_lists;
+create policy "grocery_lists_delete_own" on public.grocery_lists
+  for delete using ((select auth.uid()) = user_id);
+
+drop trigger if exists grocery_lists_touch_updated_at on public.grocery_lists;
+create trigger grocery_lists_touch_updated_at
+  before update on public.grocery_lists
   for each row execute function public.touch_updated_at();
 
 -- ---------------------------------------------------------------------------
@@ -397,7 +475,6 @@ create table if not exists public.user_settings (
   active_plan_id text,
   recent_recipe_ids jsonb not null default '[]'::jsonb check (jsonb_typeof(recent_recipe_ids) = 'array'),
   verified_recipe_ids jsonb not null default '[]'::jsonb check (jsonb_typeof(verified_recipe_ids) = 'array'),
-  checked_items jsonb not null default '{}'::jsonb check (jsonb_typeof(checked_items) = 'object'),
   cooking jsonb,
   cooking_history jsonb not null default '[]'::jsonb check (jsonb_typeof(cooking_history) = 'array'),
   updated_at timestamptz not null default now()
@@ -459,8 +536,10 @@ grant select, insert, update, delete on
   public.households,
   public.preferences,
   public.meal_plans,
+  public.planned_meals,
   public.pantry_items,
   public.grocery_extras,
+  public.grocery_lists,
   public.custom_recipes,
   public.favorites,
   public.orders,
@@ -473,8 +552,10 @@ revoke all on
   public.households,
   public.preferences,
   public.meal_plans,
+  public.planned_meals,
   public.pantry_items,
   public.grocery_extras,
+  public.grocery_lists,
   public.custom_recipes,
   public.favorites,
   public.orders,
