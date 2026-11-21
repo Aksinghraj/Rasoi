@@ -292,6 +292,21 @@ describe('sync repository', () => {
     expect(fake.store.orders.map((row) => row.id)).toEqual(['old']);
   });
 
+  test('falls back when PostgreSQL reports an undefined function', async () => {
+    const fake = createFakeClient({
+      rpcError: {
+        message: 'function public.apply_user_snapshot(payload => jsonb) does not exist',
+        code: '42883',
+      },
+    });
+    const repo = new SupabaseSyncRepository(fake.client, USER_ID);
+
+    await repo.push(snapshotWith({ orders: [orderRow('o1')] }));
+
+    expect(fake.upserts.some((call) => call.table === 'orders')).toBe(true);
+    expect(fake.store.orders.map((row) => row.id)).toEqual(['o1']);
+  });
+
   test('does not silently fall back on authorization errors', async () => {
     const fake = createFakeClient({
       rpcError: { message: 'new row violates row-level security policy', code: '42501' },
@@ -299,6 +314,31 @@ describe('sync repository', () => {
     const repo = new SupabaseSyncRepository(fake.client, USER_ID);
 
     await expect(repo.push(snapshotWith({}))).rejects.toThrow('row-level security');
+    expect(fake.upserts).toHaveLength(0);
+    expect(fake.deletes).toHaveLength(0);
+  });
+
+  test('does not silently fall back on genuine database errors', async () => {
+    const fake = createFakeClient({
+      rpcError: {
+        message: 'insert or update on table "planned_meals" violates foreign key constraint',
+        code: '23503',
+      },
+    });
+    const repo = new SupabaseSyncRepository(fake.client, USER_ID);
+
+    await expect(repo.push(snapshotWith({}))).rejects.toThrow('foreign key');
+    expect(fake.upserts).toHaveLength(0);
+    expect(fake.deletes).toHaveLength(0);
+  });
+
+  test('does not fall back on transport failures', async () => {
+    const fake = createFakeClient({
+      rpcError: { message: 'TypeError: Failed to fetch' },
+    });
+    const repo = new SupabaseSyncRepository(fake.client, USER_ID);
+
+    await expect(repo.push(snapshotWith({}))).rejects.toThrow('Failed to fetch');
     expect(fake.upserts).toHaveLength(0);
     expect(fake.deletes).toHaveLength(0);
   });

@@ -44,10 +44,9 @@ begin
 
   if payload->'profile' is not null and payload->'profile' <> 'null'::jsonb then
     -- Email, auth method and admin status are deliberately not taken from the
-    -- payload. The protect_profile_fields trigger fills them from the
-    -- authoritative auth record on insert and preserves the existing values on
-    -- update. Keeping this RPC as security invoker means the caller does not
-    -- need direct access to the auth schema.
+    -- payload. The SECURITY DEFINER protect_profile_fields trigger fills them
+    -- from the authoritative auth record on insert and preserves the existing
+    -- values on update, so this invoker-rights RPC needs no direct auth access.
     insert into public.profiles (
       id, name, phone, email, auth_method, is_admin, created_at, updated_at
     )

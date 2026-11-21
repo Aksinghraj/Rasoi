@@ -127,4 +127,50 @@ Status is exposed as `cloud.status`: `disabled`, `signed_out`, `connecting`, `sy
 
 ## Verification status
 
-The schema, RPC and client changes in this repository are covered by static SQL assertions and unit tests with a fake Supabase client. They have **not** been run against a live Supabase project from this workspace. Before relying on them in production, apply both migrations to a disposable project and verify: profile creation on sign-up, rejected attempts to set `is_admin`/`email`/`auth_method`, repeated syncs containing existing order and audit-log ids, and rollback of a deliberately failing snapshot. The demo admin remains local-only and is never uploaded; device-only mode does not call Supabase at all.
+### What was executed in this workspace
+
+The migrations were applied to a **local PostgreSQL 15.20** database with a small Supabase-compatible shim (`tests/sql/supabase_shim.sql`) that provides the `anon`, `authenticated` and `service_role` roles plus `auth.users`, `auth.uid()`, `auth.role()` and `auth.jwt()`. This is a stand-in for the Supabase runtime, **not** a live Supabase project.
+
+Commands used:
+
+```bash
+createdb rasoi_review
+psql -d rasoi_review -f tests/sql/supabase_shim.sql
+psql -d rasoi_review -f supabase/migrations/0001_init.sql
+psql -d rasoi_review -f supabase/migrations/0002_sync_rpc.sql
+psql -d rasoi_review -f tests/sql/security_review.sql
+```
+
+Verified in that database:
+
+- Both migrations apply cleanly, and **re-running `0001` then `0002` succeeds** (idempotent in this order).
+- `apply_user_snapshot` is `SECURITY INVOKER` (`prosecdef = false`), executable by `authenticated` only, and not executable by `anon` or `public`. It works while `authenticated` has **no direct `SELECT` on `auth.users`** (the shim grants that only to `service_role`), matching Supabase's model; the profile trigger reads the auth record through its `SECURITY DEFINER` function.
+- RLS is enabled on all 13 tables, and every policy's `USING`/`WITH CHECK` expression is scoped to `auth.uid()`.
+- `orders` and `audit_logs` have no UPDATE policy and no UPDATE privilege for `authenticated`; repeated inserts with an existing id preserve the original row (`ON CONFLICT DO NOTHING`, including the legacy `ignoreDuplicates` shape).
+- Profile creation from `auth.users` produces the right `email`, `phone`, `auth_method` and `is_admin = false` for email-only, phone-only and unconfirmed-email sign-ups.
+- Client INSERT of a profile with spoofed `email`/`auth_method`/`is_admin`, and client UPDATE that tries to change `id`/`email`/`auth_method`/`is_admin`, are overwritten by the trigger.
+- Cross-user inserts and deletes are blocked by RLS on every table, and cross-user updates on every table that has an UPDATE policy. Cross-user reads were spot-checked on `profiles`, `households`, `pantry_items` and `orders`. The RPC rejects a payload whose `user_id` differs from `auth.uid()`.
+- Rows in an RPC payload that name another user are written under the caller's id; user B's data was unchanged after every RPC call.
+- A failed RPC (foreign-key violation after the plan insert) rolled back the whole snapshot: the previous plan and pantry rows remained and no partial rows were left behind.
+- `delete_my_account()` removed only the caller.
+- `bun run typecheck` passes and `bun test` passes (115 tests). The client fallback is covered by unit tests with a fake Supabase client, not by the local database.
+
+`tests/sql/security_review.sql` is a manual review harness; it is not part of `bun test` and needs a PostgreSQL server plus the shim above.
+
+### What still requires a real Supabase project
+
+These checks could **not** be executed here and must not be assumed to pass until run against a disposable Supabase project:
+
+- The real GoTrue sign-up path and the actual `auth.role()`/JWT claims visible to the `auth.users` insert trigger (the shim approximates these).
+- Whether the migration role in your project can read `auth.users` inside the security-definer trigger, and whether `authenticated` has `USAGE` on the `auth` schema plus `EXECUTE` on `auth.uid()`.
+- PostgREST/`supabase-js` behaviour, including `.upsert(..., { ignoreDuplicates: true })` and RPC error codes (`PGRST202`) used by the legacy fallback.
+- Hosted database differences (extensions, `pgcrypto`, role ownership, connection pooler settings).
+- Email confirmation links, OTP delivery and phone/SMS delivery.
+- Real multi-device concurrency and last-writer-wins behaviour.
+
+Known limitations that remain after review:
+
+- The RPC expects a **complete** snapshot: an absent collection key is treated as an empty collection and will delete that user's rows. The client always sends the full snapshot, but a hand-written partial payload would be destructive to the caller's own data.
+- A profile's `email`/`auth_method` are derived at creation and preserved on client update. If the underlying auth email changes later, the profile row is not refreshed automatically.
+- If `0002_sync_rpc.sql` is not applied, the legacy per-table path is still not atomic across tables (documented above).
+- The demo admin remains local-only and is never uploaded; device-only mode does not call Supabase at all.

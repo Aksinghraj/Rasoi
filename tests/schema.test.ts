@@ -94,6 +94,15 @@ describe('database schema', () => {
     }
   });
 
+  test('every UPDATE policy re-checks ownership with WITH CHECK', () => {
+    for (const table of APP_TABLES) {
+      for (const policy of policiesFor(MIGRATION, table)) {
+        if (!policy.includes('for update')) continue;
+        expect(policy).toContain('with check');
+      }
+    }
+  });
+
   test('never grants the anon role access to app tables', () => {
     const revoke = MIGRATION.slice(MIGRATION.indexOf('revoke all on'));
     for (const table of APP_TABLES) {
@@ -198,6 +207,7 @@ describe('transactional snapshot RPC', () => {
       "raise exception 'Snapshot user does not match the signed-in user'",
     );
     expect(SYNC_MIGRATION).toContain('security invoker');
+    expect(SYNC_MIGRATION).not.toContain('security definer');
   });
 
   test('does not require direct auth.users access or trust payload identity', () => {
