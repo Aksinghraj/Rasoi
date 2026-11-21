@@ -105,6 +105,7 @@ export default function PreferencesScreen() {
         contentContainerStyle={{ padding: spacing.xl, paddingBottom: 120 }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
       >
         <InfoBanner
           message="Allergens are hard safety rules: recipes containing them are always excluded. Dislikes are soft preferences and only lower a recipe's ranking."

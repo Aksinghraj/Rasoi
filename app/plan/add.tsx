@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Search, Sparkles } from 'lucide-react-native';
 import { useApp } from '@/lib/store/AppContext';
@@ -19,6 +19,7 @@ export default function AddMealScreen() {
     recipeId?: string;
   }>();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { state, allRecipes, addRecipeToPlan, swapMeal } = useApp();
   const prefs = state.preferences;
 
@@ -67,9 +68,10 @@ export default function AddMealScreen() {
         onBack={() => router.back()}
       />
       <ScrollView
-        contentContainerStyle={{ padding: spacing.xl, paddingBottom: 140 }}
+        contentContainerStyle={{ padding: spacing.xl, paddingBottom: 140 + insets.bottom }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
       >
         <View style={styles.searchRow}>
           <Search size={17} color={colors.inkFaint} />
@@ -139,7 +141,7 @@ export default function AddMealScreen() {
         ) : null}
       </ScrollView>
 
-      <View style={styles.footer}>
+      <View style={[styles.footer, { paddingBottom: spacing.lg + insets.bottom }]}>
         <View style={{ flex: 1 }}>
           <Txt variant="tiny" color={colors.inkFaint}>
             {selected ? selected.name : 'No recipe selected'}

@@ -100,6 +100,7 @@ export default function GroceryScreen() {
   const completion = totalItems > 0 ? checkedCount / totalItems : 0;
   const pantryCovered = grocery?.lines.filter((line) => line.status === 'pantry_covered') ?? [];
   const unmatched = grocery?.lines.filter((line) => line.status === 'unmatched') ?? [];
+  const hasEstimate = Boolean(grocery && grocery.totals.matchedCount > 0 && grocery.totals.estimated > 0);
 
   const share = async () => {
     if (!grocery) return;
@@ -212,7 +213,7 @@ export default function GroceryScreen() {
                     ESTIMATED BASKET
                   </Txt>
                   <Txt variant="display" style={{ fontSize: 30 }}>
-                    {formatINR(grocery.totals.estimated)}
+                    {hasEstimate ? formatINR(grocery.totals.estimated) : 'No estimate yet'}
                   </Txt>
                   <Txt variant="tiny" color={colors.inkSoft}>
                     {grocery.totals.lineCount} items · {grocery.totals.matchedCount} matched
@@ -225,29 +226,37 @@ export default function GroceryScreen() {
                   <Txt variant="bodyStrong">{formatINR(state.preferences?.budget.weekly ?? 0)}</Txt>
                 </View>
               </View>
-              <View style={{ marginTop: spacing.md }}>
-                <ProgressBar
-                  value={Math.min(
-                    1,
-                    grocery.totals.estimated / Math.max(1, state.preferences?.budget.weekly ?? 1),
-                  )}
-                  tone={
-                    grocery.totals.estimated > (state.preferences?.budget.weekly ?? Infinity)
-                      ? colors.orange
-                      : colors.forest
-                  }
-                />
-              </View>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 6 }}>
-                <Txt variant="tiny" color={colors.inkSoft}>
-                  {grocery.totals.estimated > (state.preferences?.budget.weekly ?? Infinity)
-                    ? `${formatINR(grocery.totals.estimated - (state.preferences?.budget.weekly ?? 0))} over budget`
-                    : `${formatINR((state.preferences?.budget.weekly ?? 0) - grocery.totals.estimated)} within budget`}
+              {hasEstimate ? (
+                <>
+                  <View style={{ marginTop: spacing.md }}>
+                    <ProgressBar
+                      value={Math.min(
+                        1,
+                        grocery.totals.estimated / Math.max(1, state.preferences?.budget.weekly ?? 1),
+                      )}
+                      tone={
+                        grocery.totals.estimated > (state.preferences?.budget.weekly ?? Infinity)
+                          ? colors.orange
+                          : colors.forest
+                      }
+                    />
+                  </View>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 6 }}>
+                    <Txt variant="tiny" color={colors.inkSoft}>
+                      {grocery.totals.estimated > (state.preferences?.budget.weekly ?? Infinity)
+                        ? `${formatINR(grocery.totals.estimated - (state.preferences?.budget.weekly ?? 0))} over budget`
+                        : `${formatINR((state.preferences?.budget.weekly ?? 0) - grocery.totals.estimated)} within budget`}
+                    </Txt>
+                    <Txt variant="tiny" color={colors.forest} style={{ fontWeight: '700' }}>
+                      Pantry saves {formatINR(grocery.totals.pantrySaved)}
+                    </Txt>
+                  </View>
+                </>
+              ) : (
+                <Txt variant="tiny" color={colors.inkSoft} style={{ marginTop: spacing.sm }}>
+                  No demo catalogue product matched yet, so no price can be estimated. Add items manually or refresh later.
                 </Txt>
-                <Txt variant="tiny" color={colors.forest} style={{ fontWeight: '700' }}>
-                  Pantry saves {formatINR(grocery.totals.pantrySaved)}
-                </Txt>
-              </View>
+              )}
               <Divider style={{ marginVertical: spacing.md }} />
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <Txt variant="tiny" color={colors.inkSoft} style={{ flex: 1 }}>
@@ -310,6 +319,7 @@ export default function GroceryScreen() {
                       >
                         <Pressable
                           onPress={() => toggleChecked(line.key)}
+                          hitSlop={6}
                           accessibilityRole="checkbox"
                           accessibilityState={{ checked: Boolean(state.checkedItems[line.key]) }}
                           style={[
@@ -361,6 +371,7 @@ export default function GroceryScreen() {
                       <View style={styles.itemRow}>
                         <Pressable
                           onPress={() => toggleChecked(extra.key)}
+                          hitSlop={6}
                           accessibilityRole="checkbox"
                           accessibilityState={{ checked: extra.checked }}
                           style={[

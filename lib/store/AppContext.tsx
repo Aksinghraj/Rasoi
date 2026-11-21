@@ -174,31 +174,100 @@ interface AppContextValue {
 
 const AppContext = createContext<AppContextValue | null>(null);
 
+function asArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : [];
+}
+
+function asObject<T extends object>(value: unknown): Partial<T> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Partial<T>) : {};
+}
+
 function normalizePlan(plan: MealPlan): MealPlan {
+  const raw = asObject<MealPlan>(plan);
   return {
-    ...plan,
-    days: (plan.days ?? []).map((day) => ({
-      ...day,
-      meals: {
-        breakfast: day.meals?.breakfast ?? [],
-        lunch: day.meals?.lunch ?? [],
-        dinner: day.meals?.dinner ?? [],
-        snack: day.meals?.snack ?? [],
-      },
-    })),
+    id: typeof raw.id === 'string' ? raw.id : uid('plan'),
+    name: typeof raw.name === 'string' ? raw.name : 'Saved week',
+    startDate: typeof raw.startDate === 'string' ? raw.startDate : toISODate(new Date()),
+    createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : new Date().toISOString(),
+    source: raw.source === 'demo' ? 'demo' : 'manual',
+    days: asArray<MealPlan['days'][number]>(raw.days).map((day) => {
+      const dayRaw = asObject<MealPlan['days'][number]>(day);
+      const dayMeals = asObject<MealPlan['days'][number]['meals']>(dayRaw.meals);
+      return {
+        ...dayRaw,
+        date: typeof dayRaw.date === 'string' ? dayRaw.date : toISODate(new Date()),
+        meals: {
+          breakfast: asArray(dayMeals.breakfast),
+          lunch: asArray(dayMeals.lunch),
+          dinner: asArray(dayMeals.dinner),
+          snack: asArray(dayMeals.snack),
+        },
+      };
+    }),
   };
 }
 
-function mergeStored(stored: Partial<AppData>): AppData {
+/**
+ * Rehydrates persisted state defensively. AsyncStorage can contain older
+ * shapes, partial writes or hand-edited JSON; anything malformed must fall back
+ * to safe defaults instead of crashing a screen on first render.
+ */
+function mergeStored(stored: unknown): AppData {
   const base = createEmptyData();
+  if (!stored || typeof stored !== 'object' || Array.isArray(stored)) return base;
+  const raw = stored as Partial<AppData>;
+
+  const rawUser = raw.user as Partial<UserProfile> | null | undefined;
+  const user =
+    rawUser && typeof rawUser.id === 'string' && typeof rawUser.name === 'string'
+      ? (rawUser as UserProfile)
+      : null;
+  const rawSession = raw.session as AppData['session'];
+  const session =
+    rawSession && user && rawSession.userId === user.id ? rawSession : null;
+
+  const rawPrefs = raw.preferences as Partial<Preferences> | null | undefined;
+  const preferences = rawPrefs
+    ? {
+        ...defaultPreferences,
+        ...rawPrefs,
+        budget: { ...defaultPreferences.budget, ...asObject<Preferences['budget']>(rawPrefs.budget) },
+        restrictions: asArray<Preferences['restrictions'][number]>(rawPrefs.restrictions),
+        allergens: asArray<string>(rawPrefs.allergens),
+        customExclusions: asArray<string>(rawPrefs.customExclusions),
+        dislikes: asArray<string>(rawPrefs.dislikes),
+        equipment: asArray<Preferences['equipment'][number]>(rawPrefs.equipment),
+        mealTypes: asArray<Preferences['mealTypes'][number]>(rawPrefs.mealTypes),
+      }
+    : null;
+
+  const checkedItems: Record<string, boolean> = {};
+  for (const [key, value] of Object.entries(asObject<Record<string, boolean>>(raw.checkedItems))) {
+    if (typeof value === 'boolean') checkedItems[key] = value;
+  }
+
   return {
     ...base,
-    ...stored,
-    plans: (stored.plans ?? []).map(normalizePlan),
-    notifications: { ...base.notifications, ...(stored.notifications ?? {}) },
-    consents: { ...base.consents, ...(stored.consents ?? {}) },
-    auditLogs: stored.auditLogs ?? [],
-    verifiedRecipeIds: stored.verifiedRecipeIds ?? [],
+    ...raw,
+    session,
+    user,
+    household: raw.household && typeof raw.household === 'object' ? raw.household : null,
+    preferences,
+    pantry: asArray(raw.pantry),
+    favorites: asArray<string>(raw.favorites),
+    plans: asArray<MealPlan>(raw.plans).map(normalizePlan),
+    activePlanId: typeof raw.activePlanId === 'string' ? raw.activePlanId : null,
+    recentRecipeIds: asArray<string>(raw.recentRecipeIds),
+    customRecipes: asArray(raw.customRecipes),
+    extras: asArray(raw.extras),
+    checkedItems,
+    cookingHistory: asArray(raw.cookingHistory),
+    orders: asArray(raw.orders),
+    notifications: { ...base.notifications, ...asObject(raw.notifications) },
+    consents: { ...base.consents, ...asObject(raw.consents) },
+    auditLogs: asArray(raw.auditLogs),
+    verifiedRecipeIds: asArray<string>(raw.verifiedRecipeIds),
+    autoDeductPantry: raw.autoDeductPantry !== false,
   };
 }
 
@@ -276,6 +345,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [hydrated, setHydrated] = useState(false);
   const [pendingOtp, setPendingOtp] = useState<PendingOtp | null>(null);
   const hydratedRef = useRef(false);
+  const stateRef = useRef(state);
+  stateRef.current = state;
 
   useEffect(() => {
     let mounted = true;
@@ -284,7 +355,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (!mounted) return;
         if (raw) {
           try {
-            setState(mergeStored(JSON.parse(raw) as Partial<AppData>));
+            setState(mergeStored(JSON.parse(raw)));
           } catch {
             setState(createEmptyData());
           }
@@ -308,6 +379,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }, 250);
     return () => clearTimeout(timer);
   }, [state]);
+
+  useEffect(() => {
+    const flush = () => {
+      if (!hydratedRef.current) return;
+      AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(stateRef.current)).catch(() => undefined);
+    };
+    const subscription = AppState.addEventListener('change', (next) => {
+      if (next === 'background' || next === 'inactive') flush();
+    });
+    return () => {
+      flush();
+      subscription.remove();
+    };
+  }, []);
 
   const allRecipes = useMemo(
     () => [...state.customRecipes, ...curatedRecipes],
@@ -367,15 +452,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const identifier = pendingOtp.identifier;
       const channel = pendingOtp.channel;
       setState((prev) => {
-        const sameUser =
-          prev.user &&
-          ((channel === 'phone' && prev.user.phone === identifier.replace(/\D/g, '').slice(-10)) ||
-            (channel === 'email' && prev.user.email === identifier));
-        if (sameUser && prev.user) {
+        if (prev.user && matchesExistingAccount(prev.user, channel, identifier)) {
           return {
             ...prev,
             session: { userId: prev.user.id, method: channel, signedInAt: now },
-            user: { ...prev.user, authMethod: channel },
+            user: { ...prev.user, authMethod: channel, isAdmin: false },
           };
         }
         const user = createSelfServiceUser(
@@ -472,7 +553,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const updateProfile = useCallback((patch: Partial<UserProfile>) => {
-    setState((prev) => (prev.user ? { ...prev, user: { ...prev.user, ...patch } } : prev));
+    setState((prev) =>
+      prev.user ? { ...prev, user: sanitizeProfilePatch(prev.user, patch) } : prev,
+    );
   }, []);
 
   const updateNotifications = useCallback((patch: Partial<NotificationSettings>) => {
@@ -501,6 +584,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const addPantryItem = useCallback(
     (item: { ingredientId: string; quantity: number; unit: Unit; expiresOn?: string; staple?: boolean }) => {
+      if (!item.ingredientId || !Number.isFinite(item.quantity) || item.quantity <= 0) return;
       setState((prev) => ({
         ...prev,
         pantry: [
@@ -537,21 +621,38 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const addExtraItem = useCallback(
     (item: { name: string; category: IngredientCategory; quantity: number; unit: Unit; note?: string }) => {
-      setState((prev) => ({
-        ...prev,
-        extras: [
-          {
-            id: uid('extra'),
-            name: item.name,
-            category: item.category,
-            quantity: item.quantity,
-            unit: item.unit,
-            note: item.note,
-            addedAt: new Date().toISOString(),
-          },
-          ...prev.extras,
-        ],
-      }));
+      const name = item.name.trim();
+      if (!name || !Number.isFinite(item.quantity) || item.quantity <= 0) return;
+      setState((prev) => {
+        const existing = prev.extras.find(
+          (extra) => extra.name.trim().toLowerCase() === name.toLowerCase() && extra.unit === item.unit,
+        );
+        if (existing) {
+          return {
+            ...prev,
+            extras: prev.extras.map((extra) =>
+              extra.id === existing.id
+                ? { ...extra, quantity: extra.quantity + item.quantity, note: item.note ?? extra.note }
+                : extra,
+            ),
+          };
+        }
+        return {
+          ...prev,
+          extras: [
+            {
+              id: uid('extra'),
+              name,
+              category: item.category,
+              quantity: item.quantity,
+              unit: item.unit,
+              note: item.note,
+              addedAt: new Date().toISOString(),
+            },
+            ...prev.extras,
+          ],
+        };
+      });
     },
     [],
   );
@@ -578,10 +679,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const createGeneratedPlan = useCallback(
     (startDate?: string, name?: string) => {
       if (!state.preferences || !state.household) return null;
+      const weekStart = startDate ?? startOfWeek(toISODate(new Date()));
+      if (!isValidISODate(weekStart)) return null;
       const plan = generatePlan({
         prefs: state.preferences,
         recipes: allRecipes,
-        startDate: startDate ?? startOfWeek(toISODate(new Date())),
+        startDate: weekStart,
         servings: state.household.defaultServings,
         recentRecipeIds: state.recentRecipeIds,
         pantryIngredientIds: state.pantry.map((item) => item.ingredientId),
@@ -620,7 +723,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const addRecipeToPlan = useCallback(
     (recipeId: string, date: string, slot: MealSlot, servings: number) => {
-      if (!state.preferences || !state.household) return null;
+      if (!state.preferences || !state.household || !isValidISODate(date)) return null;
       let target = state.plans.find((plan) => plan.days.some((day) => day.date === date));
       if (!target) {
         target = {
@@ -671,7 +774,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const createEmptyPlan = useCallback(
     (startDate: string, name?: string) => {
-      if (!state.preferences) return null;
+      if (!state.preferences || !isValidISODate(startDate)) return null;
       const plan: MealPlan = {
         id: uid('plan'),
         name: name ?? `Week of ${startDate}`,
@@ -699,7 +802,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const regenerateDay = useCallback(
     (date: string) => {
-      if (!state.preferences) return;
+      if (!state.preferences || !isValidISODate(date)) return;
       mutateActivePlan((plan) =>
         regenerateDayInPlan(plan, date, {
           prefs: state.preferences as Preferences,
@@ -728,12 +831,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const duplicateActivePlan = useCallback(
     (startDate: string, name: string) => {
+      if (!isValidISODate(startDate)) return;
       setState((prev) => {
         const current = prev.plans.find((plan) => plan.id === prev.activePlanId) ?? prev.plans[0];
-        if (!current) return prev;
+        if (!current || !isValidISODate(current.startDate)) return prev;
         const offset = Math.round(
           (new Date(startDate).getTime() - new Date(current.startDate).getTime()) / 86400000,
         );
+        if (!Number.isFinite(offset)) return prev;
         const copy: MealPlan = {
           ...current,
           id: uid('plan'),
@@ -759,7 +864,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const copyDay = useCallback(
-    (fromDate: string, toDate: string) => mutateActivePlan((plan) => copyDayInPlan(plan, fromDate, toDate)),
+    (fromDate: string, toDate: string) => {
+      if (!isValidISODate(fromDate) || !isValidISODate(toDate)) return;
+      mutateActivePlan((plan) => copyDayInPlan(plan, fromDate, toDate));
+    },
     [mutateActivePlan],
   );
 

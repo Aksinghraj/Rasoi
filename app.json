@@ -20,7 +20,10 @@
       "package": "app.rasoi.mobile",
       "adaptiveIcon": {
         "backgroundColor": "#0C3B2E"
-      }
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": true,
+      "softwareKeyboardLayoutMode": "resize"
     },
     "web": {
       "bundler": "metro",

@@ -16,7 +16,7 @@ import {
   View,
   ViewStyle,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft, Info, Minus, Plus, Utensils, X } from 'lucide-react-native';
 import { colors, radius, shadow, spacing } from '@/lib/theme';
 
@@ -97,6 +97,7 @@ export function Screen({
           contentContainerStyle={[{ paddingBottom: spacing.xxxl }, content]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
           refreshControl={refreshControl}
         >
           {children}
@@ -294,7 +295,7 @@ export function SectionHeader({
       </View>
       {actionLabel && onAction ? (
         <Pressable accessibilityRole="button" onPress={onAction} hitSlop={8}>
-          <Text style={{ color: colors.forest, fontWeight: '700', fontSize: 13 }}>{actionLabel}</Text>
+          <Text maxFontSizeMultiplier={1.3} style={{ color: colors.forest, fontWeight: '700', fontSize: 13 }}>{actionLabel}</Text>
         </Pressable>
       ) : null}
     </View>
@@ -393,9 +394,9 @@ export function Stepper({
         <Minus size={compact ? 14 : 16} color={colors.forest} />
       </Pressable>
       <View style={{ alignItems: 'center', minWidth: compact ? 34 : 54 }}>
-        <Text style={{ fontWeight: '800', color: colors.ink, fontSize: compact ? 13 : 16 }}>{value}</Text>
+        <Text maxFontSizeMultiplier={1.2} style={{ fontWeight: '800', color: colors.ink, fontSize: compact ? 13 : 16 }}>{value}</Text>
         {!compact ? (
-          <Text style={{ fontSize: 10, color: colors.inkFaint, fontWeight: '600' }}>{label}</Text>
+          <Text maxFontSizeMultiplier={1.2} style={{ fontSize: 10, color: colors.inkFaint, fontWeight: '600' }}>{label}</Text>
         ) : null}
       </View>
       <Pressable
@@ -458,9 +459,9 @@ export function Field({
         {right}
       </View>
       {error ? (
-        <Text style={{ color: colors.red, fontSize: 12, marginTop: 5 }}>{error}</Text>
+        <Text maxFontSizeMultiplier={1.3} style={{ color: colors.red, fontSize: 12, marginTop: 5 }}>{error}</Text>
       ) : helper ? (
-        <Text style={{ color: colors.inkFaint, fontSize: 12, marginTop: 5 }}>{helper}</Text>
+        <Text maxFontSizeMultiplier={1.3} style={{ color: colors.inkFaint, fontSize: 12, marginTop: 5 }}>{helper}</Text>
       ) : null}
     </View>
   );
@@ -489,9 +490,9 @@ export function InfoBanner({
       <View style={{ marginTop: 1 }}>{icon ?? <Info size={16} color={palette.fg} />}</View>
       <View style={{ flex: 1 }}>
         {title ? (
-          <Text style={{ color: palette.fg, fontWeight: '700', fontSize: 13, marginBottom: 2 }}>{title}</Text>
+          <Text maxFontSizeMultiplier={1.3} style={{ color: palette.fg, fontWeight: '700', fontSize: 13, marginBottom: 2 }}>{title}</Text>
         ) : null}
-        <Text style={{ color: palette.fg, fontSize: 12.5, lineHeight: 18 }}>{message}</Text>
+        <Text maxFontSizeMultiplier={1.3} style={{ color: palette.fg, fontSize: 12.5, lineHeight: 18 }}>{message}</Text>
       </View>
     </View>
   );
@@ -510,14 +511,15 @@ export function Sheet({
   children: ReactNode;
   height?: number;
 }) {
+  const insets = useSafeAreaInsets();
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1, justifyContent: 'flex-end' }}
       >
         <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close sheet" />
-        <View style={[styles.sheet, height ? { height } : null]}>
+        <View style={[styles.sheet, height ? { height } : null, { paddingBottom: spacing.xl + insets.bottom }]}>
           <View style={styles.sheetHandle} />
           <View style={styles.sheetHeader}>
             <Txt variant="h2">{title}</Txt>
@@ -525,7 +527,11 @@ export function Sheet({
               <X size={20} color={colors.inkSoft} />
             </Pressable>
           </View>
-          <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+          >
             {children}
           </ScrollView>
         </View>
@@ -630,7 +636,7 @@ export function Avatar({ name, size = 44 }: { name: string; size?: number }) {
         justifyContent: 'center',
       }}
     >
-      <Text style={{ color: colors.mint, fontWeight: '800', fontSize: size * 0.36 }}>{initials || 'R'}</Text>
+      <Text maxFontSizeMultiplier={1.1} style={{ color: colors.mint, fontWeight: '800', fontSize: size * 0.36 }}>{initials || 'R'}</Text>
     </View>
   );
 }

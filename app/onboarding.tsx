@@ -284,6 +284,7 @@ export default function OnboardingScreen() {
           style={{ flex: 1 }}
           contentContainerStyle={{ padding: spacing.xl, paddingBottom: spacing.xxl }}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
           showsVerticalScrollIndicator={false}
         >
           {step === 0 ? (

@@ -2,13 +2,19 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ingredientMap } from '@/lib/data/ingredients';
-import { buildGroceryList, matchLinesForRetailer } from '@/lib/engine/grocery';
+import { buildGroceryList, matchLinesForRetailer, shoppingListText } from '@/lib/engine/grocery';
 import { aggregateMeals, mergeRequirements } from '@/lib/engine/grocery';
 import { isRecipeAllowed } from '@/lib/engine/allergens';
 import { addMealToPlan, emptyDay, updateMealServings } from '@/lib/engine/planner';
 import { matchProductsForIngredient } from '@/lib/data/products';
 import { fromBase, toBase, displayUnitFor } from '@/lib/engine/units';
-import { createDemoUser, createSelfServiceUser } from '@/lib/auth/users';
+import { isValidISODate } from '@/lib/format';
+import {
+  createDemoUser,
+  createSelfServiceUser,
+  matchesExistingAccount,
+  sanitizeProfilePatch,
+} from '@/lib/auth/users';
 import {
   getRetailerAdapter,
   getRetailerCapabilityView,
@@ -455,5 +461,76 @@ describe('retailer-specific checkout matching', () => {
     });
     expect(result.ok).toBe(false);
     expect(JSON.stringify(list)).toBe(before);
+  });
+});
+
+describe('Android beta hardening regressions', () => {
+  test('the demo admin can never be resumed by a self-service OTP sign-in', () => {
+    const demo = createDemoUser();
+    expect(matchesExistingAccount(demo, 'phone', '9876543210')).toBe(false);
+    expect(matchesExistingAccount(demo, 'email', 'anything@example.com')).toBe(false);
+  });
+
+  test('same-channel accounts resume with normalized identifiers only', () => {
+    const phoneUser = createSelfServiceUser('phone', '+91 98765 43210');
+    expect(matchesExistingAccount(phoneUser, 'phone', '9876543210')).toBe(true);
+    expect(matchesExistingAccount(phoneUser, 'email', '9876543210')).toBe(false);
+
+    const emailUser = createSelfServiceUser('email', 'Cook@Example.com');
+    expect(emailUser.email).toBe('cook@example.com');
+    expect(matchesExistingAccount(emailUser, 'email', 'COOK@example.COM')).toBe(true);
+  });
+
+  test('profile patches cannot change identity, role or auth method', () => {
+    const user = createSelfServiceUser('phone', '9876543210');
+    const patched = sanitizeProfilePatch(user, {
+      name: '  Meera  ',
+      isAdmin: true,
+      id: 'someone-else',
+      authMethod: 'demo',
+      createdAt: '1999-01-01T00:00:00.000Z',
+    });
+    expect(patched.name).toBe('Meera');
+    expect(patched.isAdmin).toBe(false);
+    expect(patched.id).toBe(user.id);
+    expect(patched.authMethod).toBe('phone');
+    expect(patched.createdAt).toBe(user.createdAt);
+  });
+
+  test('profile patches reject malformed phone and email values', () => {
+    const user = createSelfServiceUser('phone', '9876543210');
+    const patched = sanitizeProfilePatch(user, { phone: '123', email: 'not-an-email' });
+    expect(patched.phone).toBe(user.phone);
+    expect(patched.email).toBeUndefined();
+  });
+
+  test('ISO dates are validated for real calendar days', () => {
+    expect(isValidISODate('2026-11-21')).toBe(true);
+    expect(isValidISODate('2024-02-29')).toBe(true);
+    expect(isValidISODate('2026-02-30')).toBe(false);
+    expect(isValidISODate('2026-13-01')).toBe(false);
+    expect(isValidISODate('21-11-2026')).toBe(false);
+    expect(isValidISODate('')).toBe(false);
+  });
+
+  test('an unmatched grocery list never claims a rupee estimate', () => {
+    const plan: MealPlan = {
+      id: 'empty-plan',
+      name: 'Empty week',
+      startDate: '2026-11-23',
+      createdAt: new Date().toISOString(),
+      source: 'manual',
+      days: [emptyDay('2026-11-23')],
+    };
+    const list = buildGroceryList({
+      plan,
+      recipes: [],
+      pantry: [],
+      autoDeduct: true,
+      extras: [],
+      checked: {},
+    });
+    expect(list.totals.matchedCount).toBe(0);
+    expect(shoppingListText(list, 'Empty week')).toContain('Estimated total: not available');
   });
 });

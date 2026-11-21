@@ -110,7 +110,7 @@ export default function RecipeDetailScreen() {
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.cream }} edges={['top']}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.cream }} edges={['top', 'bottom']}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: spacing.xxxl }}>
         <FoodImage uri={recipe.image} height={310} borderRadius={0}>
           <View style={styles.heroTop}>
@@ -345,7 +345,9 @@ export default function RecipeDetailScreen() {
         <Button
           label="Start cooking"
           icon={<Flame size={16} color={colors.white} />}
-          onPress={() => router.push({ pathname: '/cook/[id]', params: { id: recipe.id } })}
+          onPress={() =>
+            router.push({ pathname: '/cook/[id]', params: { id: recipe.id, servings: `${servings}` } })
+          }
           style={{ flex: 1 }}
         />
         <Button

@@ -116,10 +116,15 @@ export default function CreateRecipeScreen() {
     if (!ingredient) return;
     const unit = canonicalUnitFor(ingredient);
     const quantity = ingredient.dimension === 'piece' ? 1 : ingredient.dimension === 'volume' ? 200 : 100;
-    setDraftIngredients((prev) => [
-      ...prev,
-      { key: uid('ing'), ingredientId, quantity, unit },
-    ]);
+    setDraftIngredients((prev) => {
+      const existing = prev.find((item) => item.ingredientId === ingredientId && item.unit === unit);
+      if (existing) {
+        return prev.map((item) =>
+          item.key === existing.key ? { ...item, quantity: item.quantity + quantity } : item,
+        );
+      }
+      return [...prev, { key: uid('ing'), ingredientId, quantity, unit }];
+    });
     setPickerOpen(false);
     setQuery('');
   };
@@ -134,6 +139,7 @@ export default function CreateRecipeScreen() {
     let carbs = 0;
     let fat = 0;
     let cost = 0;
+    const safeServings = Math.max(1, servings);
     for (const draft of draftIngredients) {
       const ingredient = ingredients.find((item) => item.id === draft.ingredientId);
       if (!ingredient) continue;
@@ -153,19 +159,24 @@ export default function CreateRecipeScreen() {
     }
     return {
       nutrition: {
-        calories: Math.round(calories / servings),
-        protein: Math.round(protein / servings),
-        carbs: Math.round(carbs / servings),
-        fat: Math.round(fat / servings),
+        calories: Math.round(calories / safeServings),
+        protein: Math.round(protein / safeServings),
+        carbs: Math.round(carbs / safeServings),
+        fat: Math.round(fat / safeServings),
       },
-      costPerServing: Math.round((cost / servings) * 10) / 10,
+      costPerServing: Math.round((cost / safeServings) * 10) / 10,
     };
   };
 
   const submit = () => {
     if (!name.trim()) return setError('Give your recipe a name.');
     if (draftIngredients.length === 0) return setError('Add at least one ingredient.');
-    const cleanSteps = steps.map((step) => step.text.trim()).filter(Boolean);
+    if (draftIngredients.some((item) => !Number.isFinite(item.quantity) || item.quantity <= 0)) {
+      return setError('Every ingredient needs a quantity above zero.');
+    }
+    const cleanSteps = steps
+      .map((step) => ({ ...step, text: step.text.trim() }))
+      .filter((step) => step.text.length > 0);
     if (cleanSteps.length === 0) return setError('Add at least one cooking step.');
     if (mealTypes.length === 0) return setError('Choose at least one meal type.');
 
@@ -183,13 +194,9 @@ export default function CreateRecipeScreen() {
       prepMinutes: Math.max(0, Number(prep) || 0),
       cookMinutes: Math.max(0, Number(cook) || 0),
       difficulty,
-      baseServings: servings,
+      baseServings: Math.max(1, servings),
       ingredients: draftIngredients.map(({ key, ...item }) => item),
-      steps: cleanSteps.map((text, index) => ({
-        text,
-        timerMinutes: steps[index]?.timerMinutes,
-        tip: steps[index]?.tip,
-      })),
+      steps: cleanSteps.map(({ text, timerMinutes, tip }) => ({ text, timerMinutes, tip })),
       nutrition: estimate.nutrition,
       tags: ['my recipe'],
       equipment,
@@ -210,6 +217,7 @@ export default function CreateRecipeScreen() {
         contentContainerStyle={{ padding: spacing.xl, paddingBottom: spacing.xxxl }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
       >
         <InfoBanner
           message="Custom recipes are stored locally and never published. Nutrition and cost are estimates calculated from the ingredients you add."

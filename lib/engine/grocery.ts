@@ -325,7 +325,11 @@ export function shoppingListText(list: GroceryList, planName: string): string {
     });
     rows.push('');
   }
-  rows.push(`Estimated total: ₹${Math.round(list.totals.estimated)}`);
+  rows.push(
+    list.totals.matchedCount > 0
+      ? `Estimated total: ₹${Math.round(list.totals.estimated)}`
+      : 'Estimated total: not available (no demo catalogue matches)',
+  );
   rows.push('Prices are demo catalogue estimates. Confirm final prices with the retailer.');
   return rows.join('\n');
 }

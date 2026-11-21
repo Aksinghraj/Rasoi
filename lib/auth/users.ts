@@ -65,7 +65,7 @@ export function createSelfServiceUser(
     id: uid('user'),
     name: channel === 'email' ? identifier.split('@')[0].replace(/[._-]/g, ' ') : 'Rasoi cook',
     phone: channel === 'phone' ? identifier.replace(/\D/g, '').slice(-10) : undefined,
-    email: channel === 'email' ? identifier : undefined,
+    email: channel === 'email' ? normalizeEmail(identifier) : undefined,
     authMethod: channel,
     createdAt,
     // Self-service sign-up must never grant admin. Roles come from the server.

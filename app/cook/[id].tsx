@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import {
   Check,
   ChevronLeft,
@@ -21,7 +22,7 @@ import { getIngredient } from '@/lib/data/ingredients';
 import { toBase, fromBase, displayUnitFor } from '@/lib/engine/units';
 
 export default function CookingModeScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, servings: servingsParam } = useLocalSearchParams<{ id: string; servings?: string }>();
   const router = useRouter();
   const {
     allRecipes,
@@ -45,9 +46,14 @@ export default function CookingModeScreen() {
     if (!recipe) return;
     if (!session && !startedRef.current) {
       startedRef.current = true;
-      startCooking(recipe.id, state.household?.defaultServings ?? recipe.baseServings);
+      const requested = Number(servingsParam);
+      const servings =
+        Number.isFinite(requested) && requested > 0
+          ? Math.min(20, Math.round(requested))
+          : state.household?.defaultServings ?? recipe.baseServings;
+      startCooking(recipe.id, servings);
     }
-  }, [recipe, session, startCooking, state.household]);
+  }, [recipe, session, startCooking, state.household, servingsParam]);
 
   const step = recipe?.steps[stepIndex];
   const timerSeconds = (step?.timerMinutes ?? 0) * 60;
@@ -142,6 +148,7 @@ export default function CookingModeScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#1D2820' }} edges={['top', 'bottom']}>
+      <StatusBar style="light" />
       <View style={styles.topBar}>
         <Pressable onPress={exit} style={styles.closeButton} accessibilityLabel="Exit cooking mode">
           <X size={20} color={colors.mint} />

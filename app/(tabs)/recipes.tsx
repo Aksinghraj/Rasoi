@@ -257,6 +257,7 @@ export default function RecipesScreen() {
         contentContainerStyle={{ padding: spacing.xl, paddingBottom: spacing.xxxl }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         renderItem={({ item }) => (
           <RecipeCard
             recipe={item.recipe}

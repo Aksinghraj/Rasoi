@@ -19,7 +19,7 @@ import {
   ToggleRow,
 } from '@/components/ui';
 import { categoryLabels, categoryOrder, colors, radius, spacing } from '@/lib/theme';
-import { addDays, formatDay, todayISO } from '@/lib/format';
+import { addDays, formatDay, isValidISODate, todayISO } from '@/lib/format';
 import { ingredients, ingredientMap } from '@/lib/data/ingredients';
 import { canonicalUnitFor, formatQuantity, unitLabels } from '@/lib/engine/units';
 import { PantryItem, Unit } from '@/lib/types';
@@ -95,7 +95,7 @@ export default function PantryScreen() {
     const value = Number(quantity.replace(/[^0-9.]/g, ''));
     if (!pickedId) return setError('Choose an ingredient.');
     if (!Number.isFinite(value) || value <= 0) return setError('Enter a quantity greater than zero.');
-    if (expiry && !/^\d{4}-\d{2}-\d{2}$/.test(expiry)) return setError('Use the date format YYYY-MM-DD.');
+    if (expiry && !isValidISODate(expiry)) return setError('Use a real date in YYYY-MM-DD format.');
 
     if (editing) {
       updatePantryItem(editing.id, {

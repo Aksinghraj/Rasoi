@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import { ArrowRight, Check, Leaf, Mail, Phone, ShieldCheck, Sparkles } from 'lucide-react-native';
 import { useApp } from '@/lib/store/AppContext';
 import { Button, Field, FoodImage, InfoBanner, Sheet, Txt } from '@/components/ui';
@@ -67,8 +68,9 @@ export default function AuthScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+      <StatusBar style="light" />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={{ flexGrow: 1 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+        <ScrollView contentContainerStyle={{ flexGrow: 1 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
           <View style={styles.hero}>
             <View style={styles.brandRow}>
               <View style={styles.brandMark}>

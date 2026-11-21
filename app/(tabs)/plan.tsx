@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, Share, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -40,6 +40,7 @@ import {
   addDays,
   formatDay,
   formatINR,
+  isValidISODate,
   startOfWeek,
   todayISO,
 } from '@/lib/format';
@@ -81,6 +82,8 @@ export default function PlanScreen() {
   const [duplicateName, setDuplicateName] = useState('');
   const [customStart, setCustomStart] = useState(weekStart);
   const [startError, setStartError] = useState<string | null>(null);
+  const [duplicateError, setDuplicateError] = useState<string | null>(null);
+  const lastActivePlanId = useRef(activePlan?.id ?? null);
   const [notice, setNotice] = useState<string | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
@@ -93,6 +96,13 @@ export default function PlanScreen() {
       setActivePlan(weekPlan.id);
     }
   }, [weekPlan, activePlan?.id, setActivePlan]);
+
+  useEffect(() => {
+    if (activePlan && activePlan.id !== lastActivePlanId.current) {
+      lastActivePlanId.current = activePlan.id;
+      setWeekStart(activePlan.startDate);
+    }
+  }, [activePlan]);
 
   useEffect(() => {
     if (!notice) return;
@@ -156,13 +166,8 @@ export default function PlanScreen() {
   };
 
   const applyStart = () => {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(customStart)) {
-      setStartError('Use the format YYYY-MM-DD.');
-      return;
-    }
-    const parsed = new Date(`${customStart}T00:00:00`);
-    if (Number.isNaN(parsed.getTime())) {
-      setStartError('That date is not valid.');
+    if (!isValidISODate(customStart)) {
+      setStartError('Use a real date in YYYY-MM-DD format.');
       return;
     }
     setWeekStart(customStart);
@@ -526,7 +531,10 @@ export default function PlanScreen() {
                 size="sm"
                 onPress={() => {
                   setSelected(null);
-                  router.push({ pathname: '/cook/[id]', params: { id: selectedRecipe.id } });
+                  router.push({
+                    pathname: '/cook/[id]',
+                    params: { id: selectedRecipe.id, servings: `${selected.meal.servings}` },
+                  });
                 }}
                 icon={<Flame size={15} color={colors.white} />}
                 style={{ flex: 1 }}
@@ -634,6 +642,7 @@ export default function PlanScreen() {
           onPress={() => {
             setDuplicateName(`${weekPlan?.name ?? 'My plan'} (copy)`);
             setDuplicateStart(addDays(weekStart, 7));
+            setDuplicateError(null);
             setMenuOpen(false);
             setDuplicateOpen(true);
           }}
@@ -671,12 +680,20 @@ export default function PlanScreen() {
         <Field
           label="New start date"
           value={duplicateStart}
-          onChangeText={setDuplicateStart}
+          onChangeText={(value) => {
+            setDuplicateStart(value);
+            setDuplicateError(null);
+          }}
+          error={duplicateError ?? undefined}
           helper="Format YYYY-MM-DD. The seven days are copied in order."
         />
         <Button
           label="Create copy"
           onPress={() => {
+            if (!isValidISODate(duplicateStart)) {
+              setDuplicateError('Use a real date in YYYY-MM-DD format.');
+              return;
+            }
             duplicateActivePlan(duplicateStart, duplicateName.trim() || 'My plan (copy)');
             setDuplicateOpen(false);
             setWeekStart(duplicateStart);

@@ -51,9 +51,20 @@ const opener: LinkOpener = {
 export default function CheckoutScreen() {
   const { retailerId } = useLocalSearchParams<{ retailerId: string }>();
   const router = useRouter();
-  const { state, activePlan, allRecipes, recordOrder, addAudit } = useApp();
-  const view = retailerId ? getRetailerCapabilityView(retailerId) : null;
-  const adapter = retailerId ? getRetailerAdapter(retailerId) : null;
+  const { state, activePlan, allRecipes, recordOrder, addAudit, updateConsents } = useApp();
+  const resolved = (() => {
+    if (!retailerId) return { view: null, adapter: null };
+    try {
+      return {
+        view: getRetailerCapabilityView(retailerId),
+        adapter: getRetailerAdapter(retailerId),
+      };
+    } catch {
+      return { view: null, adapter: null };
+    }
+  })();
+  const view = resolved.view;
+  const adapter = resolved.adapter;
 
   const [serviceability, setServiceability] = useState<ServiceabilityResult | null>(null);
   const [cart, setCart] = useState<CartResult | null>(null);
@@ -85,6 +96,8 @@ export default function CheckoutScreen() {
   const totalLines = retailerMatches?.totalLines ?? 0;
   const pincode = state.preferences?.pincode ?? '';
   const isSandbox = view?.status === 'sandbox';
+  const sharingEnabled = state.consents.retailerSharing;
+  const canHandOff = isSandbox || sharingEnabled;
 
   useEffect(() => {
     let mounted = true;
@@ -179,6 +192,10 @@ export default function CheckoutScreen() {
   };
 
   const handOff = async (query: string) => {
+    if (!isSandbox && !sharingEnabled) {
+      setError('Retailer sharing is off. Allow retailer hand-off in privacy settings before opening the retailer.');
+      return;
+    }
     setBusy(true);
     setError(null);
     const result = await openRetailerHandoff(adapter, query, opener);
@@ -230,9 +247,27 @@ export default function CheckoutScreen() {
           estimate={retailerMatches && matchedCount > 0 ? estimateTotal : null}
           matchedLines={matchedCount}
           totalLines={totalLines}
-          onOpen={!isSandbox && buyLines.length > 0 ? () => handOff(buyLines[0].line.name) : undefined}
+          onOpen={!isSandbox && canHandOff && buyLines.length > 0 ? () => handOff(buyLines[0].line.name) : undefined}
           opening={busy}
         />
+
+        {!isSandbox && !sharingEnabled ? (
+          <View style={{ marginTop: spacing.md }}>
+            <InfoBanner
+              tone="orange"
+              title="Retailer sharing is off"
+              message={`Opening ${view.shortName} sends your grocery list to the retailer. Allow retailer hand-off first, or share the list manually.`}
+              icon={<AlertTriangle size={16} color={colors.orange} />}
+            />
+            <Button
+              label="Allow retailer hand-off"
+              variant="secondary"
+              size="sm"
+              onPress={() => updateConsents({ retailerSharing: true })}
+              style={{ marginTop: spacing.sm }}
+            />
+          </View>
+        ) : null}
 
         <Card style={{ marginTop: spacing.md }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
@@ -299,7 +334,7 @@ export default function CheckoutScreen() {
                     <Txt variant="tiny" color={colors.inkFaint}>
                       {best ? 'demo estimate' : 'add manually'}
                     </Txt>
-                    {view.deepLink ? (
+                    {view.deepLink && canHandOff ? (
                       <Pressable
                         onPress={() => handOff(line.name)}
                         hitSlop={6}
@@ -402,6 +437,7 @@ export default function CheckoutScreen() {
                   variant="secondary"
                   icon={<ExternalLink size={16} color={colors.forest} />}
                   loading={busy}
+                  disabled={!canHandOff}
                   onPress={() => handOff(buyLines[0]?.line.name ?? '')}
                 />
                 <InfoBanner
