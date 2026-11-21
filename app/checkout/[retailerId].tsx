@@ -37,6 +37,7 @@ import {
   ServiceabilityResult,
   getRetailerAdapter,
   getRetailerCapabilityView,
+  isRetailerHandoffAllowed,
   openRetailerHandoff,
 } from '@/lib/retailers/adapters';
 import { OrderRecord } from '@/lib/types';
@@ -97,7 +98,7 @@ export default function CheckoutScreen() {
   const pincode = state.preferences?.pincode ?? '';
   const isSandbox = view?.status === 'sandbox';
   const sharingEnabled = state.consents.retailerSharing;
-  const canHandOff = isSandbox || sharingEnabled;
+  const canHandOff = view ? isRetailerHandoffAllowed(view, sharingEnabled) : false;
 
   useEffect(() => {
     let mounted = true;
@@ -192,7 +193,7 @@ export default function CheckoutScreen() {
   };
 
   const handOff = async (query: string) => {
-    if (!isSandbox && !sharingEnabled) {
+    if (!canHandOff) {
       setError('Retailer sharing is off. Allow retailer hand-off in privacy settings before opening the retailer.');
       return;
     }

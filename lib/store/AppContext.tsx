@@ -17,6 +17,7 @@ import {
   sanitizeProfilePatch,
 } from '@/lib/auth/users';
 import { addDays, isValidISODate, startOfWeek, toISODate, uid } from '@/lib/format';
+import { mergeExtraItem } from '@/lib/engine/grocery';
 import {
   addMealToPlan,
   copyDay as copyDayInPlan,
@@ -45,6 +46,8 @@ import {
   PendingOtp,
   Preferences,
   Recipe,
+  RecipeIngredient,
+  RecipeStep,
   Unit,
   UserProfile,
 } from '@/lib/types';
@@ -182,12 +185,25 @@ function asObject<T extends object>(value: unknown): Partial<T> {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Partial<T>) : {};
 }
 
+function normalizePlannedMeals(value: unknown): PlannedMeal[] {
+  return asArray<PlannedMeal>(value)
+    .filter(
+      (meal) =>
+        meal &&
+        typeof meal.id === 'string' &&
+        typeof meal.recipeId === 'string' &&
+        Number.isFinite(meal.servings) &&
+        meal.servings > 0,
+    )
+    .map((meal) => ({ ...meal, servings: positiveNumber(meal.servings, 2, 50) }));
+}
+
 function normalizePlan(plan: MealPlan): MealPlan {
   const raw = asObject<MealPlan>(plan);
   return {
     id: typeof raw.id === 'string' ? raw.id : uid('plan'),
     name: typeof raw.name === 'string' ? raw.name : 'Saved week',
-    startDate: typeof raw.startDate === 'string' ? raw.startDate : toISODate(new Date()),
+    startDate: isValidISODate(raw.startDate) ? raw.startDate : toISODate(new Date()),
     createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : new Date().toISOString(),
     source: raw.source === 'demo' ? 'demo' : 'manual',
     days: asArray<MealPlan['days'][number]>(raw.days).map((day) => {
@@ -195,16 +211,114 @@ function normalizePlan(plan: MealPlan): MealPlan {
       const dayMeals = asObject<MealPlan['days'][number]['meals']>(dayRaw.meals);
       return {
         ...dayRaw,
-        date: typeof dayRaw.date === 'string' ? dayRaw.date : toISODate(new Date()),
+        date: isValidISODate(dayRaw.date) ? dayRaw.date : toISODate(new Date()),
         meals: {
-          breakfast: asArray(dayMeals.breakfast),
-          lunch: asArray(dayMeals.lunch),
-          dinner: asArray(dayMeals.dinner),
-          snack: asArray(dayMeals.snack),
+          breakfast: normalizePlannedMeals(dayMeals.breakfast),
+          lunch: normalizePlannedMeals(dayMeals.lunch),
+          dinner: normalizePlannedMeals(dayMeals.dinner),
+          snack: normalizePlannedMeals(dayMeals.snack),
         },
       };
     }),
   };
+}
+
+function positiveNumber(value: unknown, fallback: number, max = Number.MAX_SAFE_INTEGER): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return fallback;
+  return Math.min(max, Math.round(value));
+}
+
+function normalizeHousehold(value: unknown): Household | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const raw = value as Partial<Household>;
+  const members = asArray<Household['members'][number]>(raw.members)
+    .filter((member) => member && typeof member.id === 'string' && typeof member.name === 'string')
+    .map((member) => ({
+      id: member.id,
+      name: member.name,
+      ageGroup: member.ageGroup === 'child' ? ('child' as const) : ('adult' as const),
+      diet: member.diet,
+    }));
+  return {
+    adults: positiveNumber(raw.adults, 2, 30),
+    children: positiveNumber(raw.children, 0, 30),
+    defaultServings: positiveNumber(raw.defaultServings, 2, 50),
+    members,
+  };
+}
+
+function normalizePantry(value: unknown): PantryItem[] {
+  return asArray<PantryItem>(value).filter(
+    (item) =>
+      item &&
+      typeof item.id === 'string' &&
+      typeof item.ingredientId === 'string' &&
+      Number.isFinite(item.quantity) &&
+      item.quantity > 0 &&
+      typeof item.unit === 'string',
+  ).map((item) => ({
+    ...item,
+    expiresOn: isValidISODate(item.expiresOn) ? item.expiresOn : undefined,
+    staple: item.staple === true,
+    addedAt: typeof item.addedAt === 'string' ? item.addedAt : new Date().toISOString(),
+  }));
+}
+
+function normalizeExtras(value: unknown): ExtraItem[] {
+  return asArray<ExtraItem>(value).filter(
+    (item) =>
+      item &&
+      typeof item.id === 'string' &&
+      typeof item.name === 'string' &&
+      item.name.trim().length > 0 &&
+      Number.isFinite(item.quantity) &&
+      item.quantity > 0 &&
+      typeof item.unit === 'string',
+  ).map((item) => ({
+    ...item,
+    name: item.name.trim(),
+    addedAt: typeof item.addedAt === 'string' ? item.addedAt : new Date().toISOString(),
+  }));
+}
+
+function normalizeCustomRecipe(value: unknown): Recipe | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const raw = value as Partial<Recipe>;
+  if (typeof raw.id !== 'string' || typeof raw.name !== 'string') return null;
+  if (!Array.isArray(raw.ingredients) || !Array.isArray(raw.steps)) return null;
+  if (!raw.nutrition || typeof raw.nutrition !== 'object') return null;
+  return {
+    ...(raw as Recipe),
+    baseServings: positiveNumber(raw.baseServings, 2, 50),
+    ingredients: asArray<RecipeIngredient>(raw.ingredients).filter(
+      (item) =>
+        item &&
+        typeof item.ingredientId === 'string' &&
+        Number.isFinite(item.quantity) &&
+        item.quantity > 0 &&
+        typeof item.unit === 'string',
+    ),
+    steps: asArray<RecipeStep>(raw.steps).filter(
+      (step) => step && typeof step.text === 'string' && step.text.trim().length > 0,
+    ),
+    tags: asArray<string>(raw.tags),
+    equipment: asArray<Recipe['equipment'][number]>(raw.equipment),
+    mealTypes: asArray<Recipe['mealTypes'][number]>(raw.mealTypes),
+    dietTypes: asArray<Recipe['dietTypes'][number]>(raw.dietTypes),
+  };
+}
+
+function normalizeBooleanSettings<T extends { [K in keyof T]: boolean }>(
+  defaults: T,
+  value: unknown,
+): T {
+  const raw = asObject<Record<string, unknown>>(value);
+  const next = { ...defaults };
+  for (const key of Object.keys(defaults) as (keyof T)[]) {
+    const stored = raw[key as string];
+    if (typeof stored === 'boolean') next[key] = stored as T[keyof T];
+  }
+  return next;
 }
 
 /**
@@ -218,13 +332,29 @@ function mergeStored(stored: unknown): AppData {
   const raw = stored as Partial<AppData>;
 
   const rawUser = raw.user as Partial<UserProfile> | null | undefined;
-  const user =
+  const user: UserProfile | null =
     rawUser && typeof rawUser.id === 'string' && typeof rawUser.name === 'string'
-      ? (rawUser as UserProfile)
+      ? {
+          id: rawUser.id,
+          name: rawUser.name,
+          phone: typeof rawUser.phone === 'string' ? rawUser.phone : undefined,
+          email: typeof rawUser.email === 'string' ? rawUser.email : undefined,
+          authMethod:
+            rawUser.authMethod === 'demo' || rawUser.authMethod === 'email'
+              ? rawUser.authMethod
+              : 'phone',
+          createdAt:
+            typeof rawUser.createdAt === 'string' ? rawUser.createdAt : new Date().toISOString(),
+          // Only the seeded demo account may be an admin. A hand-edited
+          // `isAdmin: true` on a self-service account is ignored.
+          isAdmin: rawUser.authMethod === 'demo' && rawUser.isAdmin === true,
+        }
       : null;
   const rawSession = raw.session as AppData['session'];
   const session =
-    rawSession && user && rawSession.userId === user.id ? rawSession : null;
+    rawSession && user && rawSession.userId === user.id
+      ? { userId: user.id, method: user.authMethod, signedInAt: typeof rawSession.signedInAt === 'string' ? rawSession.signedInAt : new Date().toISOString() }
+      : null;
 
   const rawPrefs = raw.preferences as Partial<Preferences> | null | undefined;
   const preferences = rawPrefs
@@ -251,22 +381,24 @@ function mergeStored(stored: unknown): AppData {
     ...raw,
     session,
     user,
-    household: raw.household && typeof raw.household === 'object' ? raw.household : null,
+    household: normalizeHousehold(raw.household),
     preferences,
-    pantry: asArray(raw.pantry),
-    favorites: asArray<string>(raw.favorites),
+    pantry: normalizePantry(raw.pantry),
+    favorites: asArray<string>(raw.favorites).filter((id) => typeof id === 'string'),
     plans: asArray<MealPlan>(raw.plans).map(normalizePlan),
     activePlanId: typeof raw.activePlanId === 'string' ? raw.activePlanId : null,
-    recentRecipeIds: asArray<string>(raw.recentRecipeIds),
-    customRecipes: asArray(raw.customRecipes),
-    extras: asArray(raw.extras),
+    recentRecipeIds: asArray<string>(raw.recentRecipeIds).filter((id) => typeof id === 'string'),
+    customRecipes: asArray(raw.customRecipes)
+      .map(normalizeCustomRecipe)
+      .filter((recipe): recipe is Recipe => recipe !== null),
+    extras: normalizeExtras(raw.extras),
     checkedItems,
     cookingHistory: asArray(raw.cookingHistory),
     orders: asArray(raw.orders),
-    notifications: { ...base.notifications, ...asObject(raw.notifications) },
-    consents: { ...base.consents, ...asObject(raw.consents) },
+    notifications: normalizeBooleanSettings(base.notifications, raw.notifications),
+    consents: normalizeBooleanSettings(base.consents, raw.consents),
     auditLogs: asArray(raw.auditLogs),
-    verifiedRecipeIds: asArray<string>(raw.verifiedRecipeIds),
+    verifiedRecipeIds: asArray<string>(raw.verifiedRecipeIds).filter((id) => typeof id === 'string'),
     autoDeductPantry: raw.autoDeductPantry !== false,
   };
 }
@@ -621,37 +753,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const addExtraItem = useCallback(
     (item: { name: string; category: IngredientCategory; quantity: number; unit: Unit; note?: string }) => {
-      const name = item.name.trim();
-      if (!name || !Number.isFinite(item.quantity) || item.quantity <= 0) return;
       setState((prev) => {
-        const existing = prev.extras.find(
-          (extra) => extra.name.trim().toLowerCase() === name.toLowerCase() && extra.unit === item.unit,
-        );
-        if (existing) {
-          return {
-            ...prev,
-            extras: prev.extras.map((extra) =>
-              extra.id === existing.id
-                ? { ...extra, quantity: extra.quantity + item.quantity, note: item.note ?? extra.note }
-                : extra,
-            ),
-          };
-        }
-        return {
-          ...prev,
-          extras: [
-            {
-              id: uid('extra'),
-              name,
-              category: item.category,
-              quantity: item.quantity,
-              unit: item.unit,
-              note: item.note,
-              addedAt: new Date().toISOString(),
-            },
-            ...prev.extras,
-          ],
-        };
+        const extras = mergeExtraItem(prev.extras, item, { id: uid('extra') });
+        return extras === prev.extras ? prev : { ...prev, extras };
       });
     },
     [],

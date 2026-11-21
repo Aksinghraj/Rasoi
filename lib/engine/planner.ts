@@ -1,4 +1,4 @@
-import { addDays, formatDay, startOfWeek, toISODate, uid } from '@/lib/format';
+import { addDays, formatDay, isValidISODate, startOfWeek, toISODate, uid } from '@/lib/format';
 import { recommendRecipes } from '@/lib/engine/recommendation';
 import {
   MealPlan,
@@ -222,9 +222,11 @@ export function copyMeal(plan: MealPlan, meal: PlannedMeal, toDate: string, toSl
 }
 
 export function duplicatePlan(plan: MealPlan, startDate: string, name: string): MealPlan {
+  if (!isValidISODate(startDate) || !isValidISODate(plan.startDate)) return plan;
   const offsetDays = Math.round(
     (new Date(startDate).getTime() - new Date(plan.startDate).getTime()) / 86400000,
   );
+  if (!Number.isFinite(offsetDays)) return plan;
   return {
     ...plan,
     id: uid('plan'),

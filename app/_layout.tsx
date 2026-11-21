@@ -33,8 +33,8 @@ function RootNavigator() {
   if (!hydrated) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.forest, alignItems: 'center', justifyContent: 'center' }}>
-        <Text style={{ color: colors.mint, fontSize: 34, fontWeight: '800', letterSpacing: -1 }}>rasoi.</Text>
-        <Text style={{ color: colors.mintStrong, fontSize: 13, marginTop: 6 }}>plan · cook · shop</Text>
+        <Text maxFontSizeMultiplier={1.3} style={{ color: colors.mint, fontSize: 34, fontWeight: '800', letterSpacing: -1 }}>rasoi.</Text>
+        <Text maxFontSizeMultiplier={1.3} style={{ color: colors.mintStrong, fontSize: 13, marginTop: 6 }}>plan · cook · shop</Text>
         <ActivityIndicator color={colors.mint} style={{ marginTop: 24 }} />
       </View>
     );

@@ -2,10 +2,20 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ingredientMap } from '@/lib/data/ingredients';
-import { buildGroceryList, matchLinesForRetailer, shoppingListText } from '@/lib/engine/grocery';
+import {
+  buildGroceryList,
+  matchLinesForRetailer,
+  mergeExtraItem,
+  shoppingListText,
+} from '@/lib/engine/grocery';
 import { aggregateMeals, mergeRequirements } from '@/lib/engine/grocery';
 import { isRecipeAllowed } from '@/lib/engine/allergens';
-import { addMealToPlan, emptyDay, updateMealServings } from '@/lib/engine/planner';
+import { addMealToPlan, duplicatePlan, emptyDay, updateMealServings } from '@/lib/engine/planner';
+import {
+  cleanRecipeSteps,
+  hasValidIngredientQuantities,
+  safeBaseServings,
+} from '@/lib/engine/customRecipe';
 import { matchProductsForIngredient } from '@/lib/data/products';
 import { fromBase, toBase, displayUnitFor } from '@/lib/engine/units';
 import { isValidISODate } from '@/lib/format';
@@ -18,6 +28,7 @@ import {
 import {
   getRetailerAdapter,
   getRetailerCapabilityView,
+  isRetailerHandoffAllowed,
   openRetailerHandoff,
   RetailerNotSupportedError,
 } from '@/lib/retailers/adapters';
@@ -532,5 +543,86 @@ describe('Android beta hardening regressions', () => {
     });
     expect(list.totals.matchedCount).toBe(0);
     expect(shoppingListText(list, 'Empty week')).toContain('Estimated total: not available');
+  });
+});
+
+describe('duplicate-input regressions', () => {
+  test('adding the same extra twice merges quantity instead of duplicating the row', () => {
+    const once = mergeExtraItem(
+      [],
+      { name: 'Curd', category: 'dairy', quantity: 200, unit: 'g' },
+      { id: 'extra_1', addedAt: '2026-11-21T00:00:00.000Z' },
+    );
+    const twice = mergeExtraItem(once, { name: '  curd  ', category: 'dairy', quantity: 100, unit: 'g' }, { id: 'extra_2' });
+    expect(twice).toHaveLength(1);
+    expect(twice[0].name).toBe('Curd');
+    expect(twice[0].quantity).toBe(300);
+  });
+
+  test('different units for the same extra stay as separate rows', () => {
+    const once = mergeExtraItem([], { name: 'Milk', category: 'dairy', quantity: 1, unit: 'l' }, { id: 'extra_1' });
+    const twice = mergeExtraItem(once, { name: 'Milk', category: 'dairy', quantity: 500, unit: 'ml' }, { id: 'extra_2' });
+    expect(twice).toHaveLength(2);
+  });
+
+  test('blank extras and non-positive quantities are ignored', () => {
+    const empty = mergeExtraItem([], { name: '   ', category: 'other', quantity: 1, unit: 'piece' });
+    const zero = mergeExtraItem([], { name: 'Curd', category: 'dairy', quantity: 0, unit: 'g' });
+    const negative = mergeExtraItem([], { name: 'Curd', category: 'dairy', quantity: -5, unit: 'g' });
+    expect(empty).toHaveLength(0);
+    expect(zero).toHaveLength(0);
+    expect(negative).toHaveLength(0);
+  });
+
+  test('cleaning steps keeps each timer and tip attached to its own text', () => {
+    const steps = cleanRecipeSteps([
+      { text: '  Chop the onions  ', timerMinutes: 5, tip: ' Keep them even ' },
+      { text: '   ', timerMinutes: 99, tip: 'must not attach' },
+      { text: 'Fry until golden', timerMinutes: 3 },
+    ]);
+    expect(steps).toHaveLength(2);
+    expect(steps[0]).toEqual({ text: 'Chop the onions', timerMinutes: 5, tip: 'Keep them even' });
+    expect(steps[1]).toEqual({ text: 'Fry until golden', timerMinutes: 3, tip: undefined });
+  });
+
+  test('custom recipe quantities must be finite and above zero', () => {
+    expect(hasValidIngredientQuantities([])).toBe(false);
+    expect(hasValidIngredientQuantities([{ ingredientId: 'paneer', quantity: 0, unit: 'g' }])).toBe(false);
+    expect(hasValidIngredientQuantities([{ ingredientId: 'paneer', quantity: -1, unit: 'g' }])).toBe(false);
+    expect(hasValidIngredientQuantities([{ ingredientId: 'paneer', quantity: 200, unit: 'g' }])).toBe(true);
+  });
+
+  test('serving counts are never zero, negative or NaN', () => {
+    expect(safeBaseServings(0)).toBe(1);
+    expect(safeBaseServings(-3)).toBe(1);
+    expect(safeBaseServings(Number.NaN)).toBe(1);
+    expect(safeBaseServings(2.6)).toBe(3);
+  });
+
+  test('duplicating a plan rejects an invalid start date instead of creating NaN dates', () => {
+    const base = planWith('r1');
+    const unchanged = duplicatePlan(base, '2026-02-30', 'Broken copy');
+    expect(unchanged).toBe(base);
+
+    const copy = duplicatePlan(base, '2026-11-23', 'Next week');
+    expect(copy.id).not.toBe(base.id);
+    expect(copy.startDate).toBe('2026-11-23');
+    expect(copy.days[0].date).toBe('2026-11-23');
+  });
+});
+
+describe('checkout guards', () => {
+  test('an unknown retailer id throws instead of rendering a broken checkout', () => {
+    expect(() => getRetailerAdapter('not_a_retailer')).toThrow();
+    expect(() => getRetailerCapabilityView('not_a_retailer')).toThrow();
+  });
+
+  test('deep-link hand-off requires retailer-sharing consent, sandbox does not', () => {
+    const deepLink = getRetailerCapabilityView('bigbasket');
+    expect(isRetailerHandoffAllowed(deepLink, false)).toBe(false);
+    expect(isRetailerHandoffAllowed(deepLink, true)).toBe(true);
+
+    const sandbox = getRetailerCapabilityView('rasoi_market');
+    expect(isRetailerHandoffAllowed(sandbox, false)).toBe(true);
   });
 });

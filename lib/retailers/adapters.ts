@@ -437,6 +437,18 @@ function modeLabelFor(info: RetailerInfo): string {
   return 'Manual list';
 }
 
+/**
+ * A sandbox retailer stays inside the app, so it needs no sharing consent.
+ * Every other retailer receives the grocery list, so hand-off is blocked until
+ * the user explicitly enables retailer sharing.
+ */
+export function isRetailerHandoffAllowed(
+  view: Pick<RetailerCapabilityView, 'status'>,
+  sharingEnabled: boolean,
+): boolean {
+  return view.status === 'sandbox' || sharingEnabled;
+}
+
 export function getRetailerCapabilityView(retailerId: string): RetailerCapabilityView {
   const adapter = getRetailerAdapter(retailerId);
   const info = adapter.info;

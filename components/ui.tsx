@@ -173,6 +173,7 @@ export function Button({
     <Pressable
       accessibilityRole="button"
       accessibilityState={{ disabled: isDisabled, busy: loading }}
+      hitSlop={size === 'sm' ? 6 : 2}
       onPress={isDisabled ? undefined : onPress}
       style={({ pressed }) => [
         styles.button,
@@ -229,6 +230,7 @@ export function Chip({
     <Pressable
       accessibilityRole="button"
       accessibilityState={{ selected }}
+      hitSlop={6}
       onPress={onPress}
       style={({ pressed }) => [
         styles.chip,
@@ -388,6 +390,7 @@ export function Stepper({
       <Pressable
         accessibilityLabel={`Decrease ${label}`}
         disabled={value <= min}
+        hitSlop={8}
         onPress={() => onChange(Math.max(min, value - 1))}
         style={[styles.stepperButton, value <= min && { opacity: 0.35 }]}
       >
@@ -402,6 +405,7 @@ export function Stepper({
       <Pressable
         accessibilityLabel={`Increase ${label}`}
         disabled={value >= max}
+        hitSlop={8}
         onPress={() => onChange(Math.min(max, value + 1))}
         style={[styles.stepperButton, value >= max && { opacity: 0.35 }]}
       >
@@ -450,6 +454,7 @@ export function Field({
             props.onBlur?.(event);
           }}
           placeholderTextColor={colors.inkFaint}
+          maxFontSizeMultiplier={1.3}
           style={[
             styles.input,
             props.multiline && { height: 88, textAlignVertical: 'top', paddingTop: 10 },
@@ -830,6 +835,7 @@ export const styles = StyleSheet.create({
   toggleRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    minHeight: 44,
     paddingVertical: spacing.md,
   },
   switchTrack: {

@@ -6,6 +6,7 @@ import {
   ExtraItem,
   GrocerySource,
   Ingredient,
+  IngredientCategory,
   MealPlan,
   NutritionSummary,
   PantryItem,
@@ -20,6 +21,50 @@ import { displayUnitFor, formatQuantity, fromBase, toBase } from '@/lib/engine/u
 export interface MealWithRecipe {
   recipe: Recipe;
   servings: number;
+}
+
+export interface ExtraDraft {
+  name: string;
+  category: IngredientCategory;
+  quantity: number;
+  unit: Unit;
+  note?: string;
+}
+
+/**
+ * Adds an extra item to the grocery list, merging by case-insensitive name and
+ * unit. Empty names and non-positive quantities are ignored so a repeated
+ * submission cannot create duplicate rows.
+ */
+export function mergeExtraItem(
+  extras: ExtraItem[],
+  item: ExtraDraft,
+  options: { id?: string; addedAt?: string } = {},
+): ExtraItem[] {
+  const name = item.name.trim();
+  if (!name || !Number.isFinite(item.quantity) || item.quantity <= 0) return extras;
+  const existing = extras.find(
+    (extra) => extra.name.trim().toLowerCase() === name.toLowerCase() && extra.unit === item.unit,
+  );
+  if (existing) {
+    return extras.map((extra) =>
+      extra.id === existing.id
+        ? { ...extra, quantity: extra.quantity + item.quantity, note: item.note ?? extra.note }
+        : extra,
+    );
+  }
+  return [
+    {
+      id: options.id ?? `extra_${Date.now().toString(36)}`,
+      name,
+      category: item.category,
+      quantity: item.quantity,
+      unit: item.unit,
+      note: item.note,
+      addedAt: options.addedAt ?? new Date().toISOString(),
+    },
+    ...extras,
+  ];
 }
 
 export interface Requirement {

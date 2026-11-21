@@ -25,7 +25,7 @@ Rasoi is an India-first meal planning and smart grocery app built with Expo and 
 - **Custom recipes** with ingredient picker, steps, equipment and estimated nutrition and cost.
 - **Preferences and privacy**: diet/allergen/restriction editing, budget, location, language, consent toggles, JSON export and account deletion.
 - **Demo admin console**: analytics, recipe verification, ingredient master, retailer status and audit log.
-- **Automated engine tests** (40 tests) covering conversions, aggregation, pantry deduction, pack optimisation, allergen safety, planner, account roles, retailer-specific matching and adapter honesty.
+- **Automated engine tests** (55 tests) covering conversions, aggregation, pantry deduction, pack optimisation, allergen safety, planner, account roles, retailer-specific matching, adapter honesty, duplicate-input guards and Android hardening regressions.
 
 ---
 
@@ -567,9 +567,15 @@ Covered:
 - deep-link hand-off, store-page fallback and honest failure copy
 - failed hand-offs leaving the Rasoi shopping list untouched
 - sandbox cart/checkout never claiming a real order
-- self-service users never receiving admin privileges
+- self-service users never receiving admin privileges, and the demo admin never resumable through OTP
+- profile patches that try to change identity, role or auth method being rejected
+- real-calendar ISO date validation, including duplicate-plan start dates
 - demo catalogue prices never labelled as verified live prices
 - BigBasket, Blinkit, Zepto and Instamart checkouts matching only their own catalogue products
+- duplicate extras merging by name and unit, and invalid extras being ignored
+- custom recipe steps keeping their own timer and tip, and non-positive quantities being rejected
+- unknown retailer ids failing safely, and deep-link hand-off requiring retailer-sharing consent
+- empty grocery estimates being presented as unavailable instead of `₹0`
 
 Type checking:
 
@@ -637,4 +643,16 @@ Deep olive, warm ivory, restrained terracotta, editorial serif headings, smaller
 
 ### Validation notes
 
-The source archive supplied for this pass did not include installed dependencies. Typecheck and automated tests therefore still need to be run in the project environment after applying this redesign. Physical Android validation remains required for font scaling, keyboard overlap, navigation/back stack, image loading, and retailer hand-off.
+`bun run typecheck` and `bun test` pass in the project environment. Physical Android validation remains required for font scaling, keyboard overlap, navigation/back stack, image loading, and retailer hand-off.
+
+## Phase 2.1 — Reliability and Android hardening
+
+This pass keeps the Phase 2 visual design, navigation, routes and data flows and hardens the behaviour behind them. The full defect list, verification results and device checklist are in [`docs/ANDROID_QA_REPORT.md`](docs/ANDROID_QA_REPORT.md).
+
+- **Auth:** a self-service OTP can no longer resume the seeded demo admin; only same-channel accounts resume, and resumption always clears `isAdmin`. Profile updates are whitelisted to name, phone and email.
+- **Persistence:** rehydration validates the stored document, drops malformed plans, pantry items, extras, custom recipes, sessions and boolean settings, and rebuilds preferences and household defaults. State is flushed on background/inactive and provider unmount.
+- **Dates:** real-calendar ISO validation now covers blank plans, generated weeks, meal add/copy, plan duplication, week browsing and pantry expiry.
+- **Planner and grocery:** duplicate extras merge by name and unit; custom recipe steps keep their own timers and tips; non-positive quantities are rejected; an unmatched list shows "No estimate yet" instead of `₹0`.
+- **Retailers:** unknown retailer ids show the existing empty state instead of crashing; deep-link hand-off and per-item search require retailer-sharing consent.
+- **Android:** tab bar and sheets account for navigation-bar insets, long forms dismiss the keyboard on drag, status bar content follows the screen, shared text and inputs cap font scaling, and small controls have larger touch targets.
+- **Tests:** 55 automated tests (174 assertions) plus `bun run typecheck` pass.

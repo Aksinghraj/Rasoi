@@ -7,7 +7,7 @@ Scope: Phase 2.1 reliability and Android compatibility pass over the existing ap
 | Check | Command | Result |
 | --- | --- | --- |
 | TypeScript (strict) | `bun run typecheck` | Passes with no errors |
-| Automated tests | `bun test` | 46 pass, 0 fail (147 assertions) |
+| Automated tests | `bun test` | 55 pass, 0 fail (174 assertions) |
 | Storage shape review | manual code audit | Malformed or partial persisted state now falls back safely |
 | Retailer claim review | manual code audit | No live price, stock, serviceability or cart claim is introduced |
 
@@ -24,7 +24,8 @@ Physical-device checks still required before calling the build beta-ready: Andro
 
 ### Persistence and reliability
 
-- Persisted state was trusted blindly. A partial or hand-edited AsyncStorage document could crash a screen (`days` missing, `meals` not an object, `checkedItems` not a map, a session without a user). Rehydration now validates the top-level shape, clears a session that does not match its user, coerces array fields, rebuilds preferences with defaults, and filters checked-item keys to booleans.
+- Persisted state was trusted blindly. A partial or hand-edited AsyncStorage document could crash a screen (`days` missing, `meals` not an object, `checkedItems` not a map, a session without a user). Rehydration now validates the top-level shape, clears a session that does not match its user, normalises household counts and members, drops malformed pantry items, extras, custom recipes and planned meals, coerces array fields, rebuilds preferences with defaults, and filters checked-item and notification/consent keys to booleans.
+- A hand-edited document could set `isAdmin: true` on a self-service account. Rehydration now grants admin only when the stored auth method is `demo` and the flag is true.
 - A debounced write could be lost when Android backgrounded the app. State is now also flushed on `background`/`inactive` and on provider unmount.
 
 ### Dates
@@ -59,7 +60,8 @@ Physical-device checks still required before calling the build beta-ready: Andro
 - Recipe detail and the meal picker now respect the bottom safe area; the meal picker's absolute footer is offset by the inset so its action is never under the system bar.
 - Status bar content is light on the dark auth and cooking screens, and the root stays dark elsewhere.
 - Long forms and list screens use `keyboardDismissMode="on-drag"`; fields keep `keyboardShouldPersistTaps`.
-- Raw `Text` elements in shared primitives (banner copy, helper/error text, stepper values, avatar initials, section actions) now cap font scaling. `app.json` declares edge-to-edge, predictive back and `resize` keyboard mode for Android.
+- Raw `Text` elements in shared primitives (banner copy, helper/error text, stepper values, avatar initials, section actions) and the splash/not-found screens now cap font scaling, and text inputs cap scaling so large system fonts cannot overflow the field.
+- Small icon and stepper controls carry `hitSlop`, and shared chips, compact buttons and toggle rows meet a 44 px touch target. `app.json` declares edge-to-edge, predictive back and `resize` keyboard mode for Android.
 
 ## Regression coverage added
 
@@ -68,7 +70,11 @@ Physical-device checks still required before calling the build beta-ready: Andro
 - demo-admin accounts cannot be resumed through OTP;
 - same-channel matching with normalised phone/email;
 - profile patches cannot change identity, role or auth method, and reject malformed contact details;
-- real-calendar ISO date validation;
+- real-calendar ISO date validation, including duplicate-plan start dates;
+- duplicate extras merging by name and unit, different units staying separate, and blank/non-positive extras being ignored;
+- custom recipe steps keeping each timer and tip attached to its own text, and non-positive ingredient quantities being rejected;
+- serving counts never becoming zero, negative or NaN;
+- unknown retailer ids failing safely, and deep-link hand-off requiring retailer-sharing consent;
 - unmatched grocery lists never print a rupee estimate.
 
 ## Manual device checklist

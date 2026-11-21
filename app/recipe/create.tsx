@@ -29,6 +29,11 @@ import { uid } from '@/lib/format';
 import { ingredients } from '@/lib/data/ingredients';
 import { toBase, unitLabels, canonicalUnitFor } from '@/lib/engine/units';
 import {
+  cleanRecipeSteps,
+  hasValidIngredientQuantities,
+  safeBaseServings,
+} from '@/lib/engine/customRecipe';
+import {
   DietType,
   Difficulty,
   EquipmentId,
@@ -139,7 +144,7 @@ export default function CreateRecipeScreen() {
     let carbs = 0;
     let fat = 0;
     let cost = 0;
-    const safeServings = Math.max(1, servings);
+    const safeServings = safeBaseServings(servings);
     for (const draft of draftIngredients) {
       const ingredient = ingredients.find((item) => item.id === draft.ingredientId);
       if (!ingredient) continue;
@@ -171,12 +176,10 @@ export default function CreateRecipeScreen() {
   const submit = () => {
     if (!name.trim()) return setError('Give your recipe a name.');
     if (draftIngredients.length === 0) return setError('Add at least one ingredient.');
-    if (draftIngredients.some((item) => !Number.isFinite(item.quantity) || item.quantity <= 0)) {
+    if (!hasValidIngredientQuantities(draftIngredients)) {
       return setError('Every ingredient needs a quantity above zero.');
     }
-    const cleanSteps = steps
-      .map((step) => ({ ...step, text: step.text.trim() }))
-      .filter((step) => step.text.length > 0);
+    const cleanSteps = cleanRecipeSteps(steps);
     if (cleanSteps.length === 0) return setError('Add at least one cooking step.');
     if (mealTypes.length === 0) return setError('Choose at least one meal type.');
 
@@ -194,9 +197,9 @@ export default function CreateRecipeScreen() {
       prepMinutes: Math.max(0, Number(prep) || 0),
       cookMinutes: Math.max(0, Number(cook) || 0),
       difficulty,
-      baseServings: Math.max(1, servings),
+      baseServings: safeBaseServings(servings),
       ingredients: draftIngredients.map(({ key, ...item }) => item),
-      steps: cleanSteps.map(({ text, timerMinutes, tip }) => ({ text, timerMinutes, tip })),
+      steps: cleanSteps,
       nutrition: estimate.nutrition,
       tags: ['my recipe'],
       equipment,
