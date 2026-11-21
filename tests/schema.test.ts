@@ -4,6 +4,13 @@ import { join } from 'node:path';
 
 const ROOT = join(import.meta.dir, '..');
 const MIGRATION = readFileSync(join(ROOT, 'supabase/migrations/0001_init.sql'), 'utf8');
+const SYNC_MIGRATION = readFileSync(join(ROOT, 'supabase/migrations/0002_sync_rpc.sql'), 'utf8');
+
+function functionBody(sql: string, name: string, nextMarker: string): string {
+  const start = sql.indexOf(`create or replace function public.${name}`);
+  const end = sql.indexOf(nextMarker, start);
+  return start === -1 ? '' : sql.slice(start, end === -1 ? undefined : end);
+}
 
 function createdTables(sql: string): string[] {
   return [...sql.matchAll(/create table if not exists public\.(\w+)/g)].map((match) => match[1]);
@@ -67,6 +74,16 @@ describe('database schema', () => {
     }
   });
 
+  test('keeps orders and audit logs insert-only at the policy layer', () => {
+    for (const table of ['orders', 'audit_logs']) {
+      const policies = policiesFor(MIGRATION, table);
+      expect(policies.some((policy) => policy.startsWith(`${table}_select_own`))).toBe(true);
+      expect(policies.some((policy) => policy.startsWith(`${table}_insert_own`))).toBe(true);
+      expect(policies.some((policy) => policy.startsWith(`${table}_delete_own`))).toBe(true);
+      expect(policies.some((policy) => policy.includes('for update'))).toBe(false);
+    }
+  });
+
   test('gives the client read/write policies only for its own rows', () => {
     for (const table of APP_TABLES) {
       const policies = policiesFor(MIGRATION, table);
@@ -83,6 +100,12 @@ describe('database schema', () => {
       expect(revoke).toContain(`public.${table}`);
     }
     expect(revoke).toContain('from anon');
+  });
+
+  test('revokes UPDATE privilege from append-only tables', () => {
+    expect(MIGRATION).toContain(
+      'revoke update on public.orders, public.audit_logs from authenticated;',
+    );
   });
 });
 
@@ -119,6 +142,103 @@ describe('authorization assumptions', () => {
   test('keeps plan meals owned and cascaded from their plan', () => {
     expect(MIGRATION).toMatch(
       /foreign key \(user_id, plan_id\)\s+references public\.meal_plans \(user_id, id\)\s+on delete cascade/,
+    );
+  });
+
+  test('derives profile identity from auth.users, not from JWT claims', () => {
+    const body = functionBody(
+      MIGRATION,
+      'protect_profile_fields()',
+      'drop trigger if exists profiles_protect_fields',
+    );
+    expect(body).toContain('from auth.users');
+    expect(body).toContain('new.email := account_email;');
+    expect(body).toContain('new.phone := coalesce(new.phone, account_phone);');
+    expect(body).not.toContain('auth.jwt()');
+  });
+
+  test('profile creation is server-owned and ignores client identity fields', () => {
+    const handleNewUser = functionBody(
+      MIGRATION,
+      'handle_new_user()',
+      'drop trigger if exists on_auth_user_created',
+    );
+    expect(handleNewUser).toContain('new.email');
+    expect(handleNewUser).toContain('new.phone');
+    expect(handleNewUser).toContain(
+      "case when new.phone is not null and new.email is null then 'phone' else 'email' end",
+    );
+    expect(handleNewUser).toContain('on conflict (id) do nothing');
+  });
+
+  test('clients cannot grant themselves admin on insert or update', () => {
+    const body = functionBody(
+      MIGRATION,
+      'protect_profile_fields()',
+      'drop trigger if exists profiles_protect_fields',
+    );
+    expect(body).toContain('new.is_admin := false;');
+    expect(body).toContain('new.is_admin := old.is_admin;');
+    expect(body).toContain('new.id := old.id;');
+    expect(body).toContain('new.email := old.email;');
+    expect(body).toContain('new.auth_method := old.auth_method;');
+  });
+});
+
+describe('transactional snapshot RPC', () => {
+  test('applies a complete snapshot in one caller-scoped function', () => {
+    expect(SYNC_MIGRATION).toContain(
+      'create or replace function public.apply_user_snapshot(payload jsonb)',
+    );
+    expect(SYNC_MIGRATION).toContain('uid uuid := auth.uid();');
+    expect(SYNC_MIGRATION).toContain(
+      "if payload->>'user_id' is distinct from uid::text then",
+    );
+    expect(SYNC_MIGRATION).toContain(
+      "raise exception 'Snapshot user does not match the signed-in user'",
+    );
+    expect(SYNC_MIGRATION).toContain('security invoker');
+  });
+
+  test('does not require direct auth.users access or trust payload identity', () => {
+    expect(SYNC_MIGRATION).not.toContain('auth.users');
+    const profileInsert = SYNC_MIGRATION.slice(
+      SYNC_MIGRATION.indexOf('insert into public.profiles'),
+      SYNC_MIGRATION.indexOf('if payload->\'household\''),
+    );
+    expect(profileInsert).toContain("'email',");
+    expect(profileInsert).toContain('false,');
+    expect(profileInsert).not.toContain("payload->'profile'->>'email'");
+    expect(profileInsert).not.toContain("payload->'profile'->>'is_admin'");
+  });
+
+  test('scopes every delete to the signed-in user', () => {
+    const deletes = [...SYNC_MIGRATION.matchAll(/delete from public\.\w+[\s\S]*?;/g)].map(
+      (match) => match[0],
+    );
+    expect(deletes.length).toBeGreaterThan(0);
+    for (const statement of deletes) {
+      expect(statement).toContain('uid');
+    }
+  });
+
+  test('keeps orders and audit logs insert-only', () => {
+    for (const table of ['orders', 'audit_logs']) {
+      const insert = SYNC_MIGRATION.slice(
+        SYNC_MIGRATION.indexOf(`insert into public.${table}`),
+        SYNC_MIGRATION.indexOf(`delete from public.${table}`),
+      );
+      expect(insert).toContain('on conflict (user_id, id) do nothing');
+      expect(insert).not.toContain('do update');
+    }
+  });
+
+  test('grants execution only to authenticated', () => {
+    expect(SYNC_MIGRATION).toContain(
+      'revoke all on function public.apply_user_snapshot(jsonb) from public;',
+    );
+    expect(SYNC_MIGRATION).toContain(
+      'grant execute on function public.apply_user_snapshot(jsonb) to authenticated;',
     );
   });
 });

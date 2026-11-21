@@ -55,20 +55,32 @@ create policy "profiles_update_own" on public.profiles
   with check ((select auth.uid()) = id);
 
 -- Roles and identity are server-owned. A client may only change presentation
--- fields (name, phone). Email mirrors the auth record and is not editable here.
+-- fields (name, phone). Email and the authentication method are copied from the
+-- authoritative auth.users row, never from client input or from JWT claims.
+-- During the sign-up trigger the JWT may not exist yet, so auth.jwt() is not a
+-- safe source of identity here.
 create or replace function public.protect_profile_fields()
 returns trigger
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, auth
 as $$
+declare
+  account_email text;
+  account_phone text;
 begin
   if coalesce(auth.role(), 'anon') <> 'service_role' then
     if tg_op = 'INSERT' then
+      select u.email, u.phone
+        into account_email, account_phone
+        from auth.users u
+       where u.id = new.id;
+
       new.is_admin := false;
-      new.email := auth.jwt() ->> 'email';
+      new.email := account_email;
+      new.phone := coalesce(new.phone, account_phone);
       new.auth_method := case
-        when (auth.jwt() ->> 'phone') is not null and (auth.jwt() ->> 'email') is null then 'phone'
+        when account_phone is not null and account_email is null then 'phone'
         else 'email'
       end;
     else
@@ -562,3 +574,8 @@ revoke all on
   public.audit_logs,
   public.user_settings
 from anon;
+
+-- Orders and audit logs are append-only histories. Their policies already omit
+-- UPDATE; revoke the table privilege too so a future policy mistake cannot make
+-- them silently mutable.
+revoke update on public.orders, public.audit_logs from authenticated;

@@ -337,10 +337,12 @@ function profileFromRow(row: ProfileRow | null): UserProfile | null {
     name: stringOr(row.name, 'Rasoi cook'),
     phone: row.phone ?? undefined,
     email: row.email ?? undefined,
-    authMethod: row.auth_method === 'demo' || row.auth_method === 'phone' ? row.auth_method : 'email',
+    // Remote accounts are only email or phone accounts. The demo mode and the
+    // demo admin are local-only and can never be imported from a cloud row.
+    authMethod: row.auth_method === 'phone' ? 'phone' : 'email',
     createdAt: stringOr(row.created_at, new Date().toISOString()),
     // A self-service account can never be an admin, even if a row says so.
-    isAdmin: row.auth_method === 'demo' && row.is_admin === true,
+    isAdmin: false,
   };
 }
 

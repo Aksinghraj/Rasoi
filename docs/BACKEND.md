@@ -28,7 +28,7 @@ The app never pretends a cloud feature is available when it is not configured.
    supabase link --project-ref <project-ref>
    supabase db push
    ```
-   or paste `supabase/migrations/0001_init.sql` into the *SQL editor* and run it. The migration is idempotent and safe to re-run.
+   or paste `supabase/migrations/0001_init.sql`, then `supabase/migrations/0002_sync_rpc.sql`, into the *SQL editor* and run them in that order. Both migrations are idempotent and safe to re-run. `0002` is what makes sync atomic; without it the app uses the documented legacy fallback.
 5. **Create `.env`.** Copy the template and fill in the two public values:
    ```bash
    cp .env.example .env
@@ -71,13 +71,16 @@ Every row is scoped by `user_id` (or `id` for `profiles`). Plan days are stored 
 ### Authorization
 
 - Row Level Security is enabled on every table.
-- Every table has separate select/insert/update/delete policies using `auth.uid() = user_id` (or `= id` for `profiles`); inserts also use `with check`.
+- Every table has separate select and insert policies using `auth.uid() = user_id` (or `= id` for `profiles`); inserts also use `with check`.
+- Most tables also have update and delete policies. `favorites` has no update policy, and `orders` and `audit_logs` are **insert-only**: they have select, insert and delete policies but deliberately no update policy, and the `UPDATE` table privilege is revoked from `authenticated` as well.
 - `planned_meals` is additionally constrained to a plan the same user owns through a composite foreign key.
 - The client never checks a role to authorize a write; the database decides.
-- `profiles.is_admin` is **server-owned**. The `protect_profile_fields` trigger resets `is_admin`, `id`, `email` and `auth_method` on any client update unless the request uses the service role.
-- `handle_new_user` creates a profile row whenever Supabase Auth creates a user.
+- `profiles.is_admin` is **server-owned**. The `protect_profile_fields` trigger forces `is_admin = false` on insert and preserves the existing value on update unless the request uses the service role.
+- Profile identity comes from the authoritative `auth.users` row, not from client input and not from `auth.jwt()`. The sign-up trigger may run before a JWT exists, so `protect_profile_fields` reads `email` and `phone` from `auth.users` by `new.id`. On insert it overwrites any client-supplied email and authentication method; on update it restores `id`, `email`, `auth_method`, `is_admin` and `created_at` from the existing profile row.
+- `handle_new_user` creates a profile row from the `NEW` `auth.users` record whenever Supabase Auth creates a user.
 - Grants are given to `authenticated`; access is revoked from `anon`.
 - `delete_my_account()` is a security-definer RPC that removes the caller's rows and auth user.
+- `apply_user_snapshot(payload jsonb)` is a security-invoker RPC that applies one complete account snapshot in a single transaction. It derives ownership from `auth.uid()`, rejects a payload whose `user_id` does not match, writes every row with the caller's id and scopes every delete to the caller. RLS remains active as a second layer; no service-role key is used.
 
 ## Auth flows
 
@@ -96,14 +99,21 @@ Sessions are persisted with `expo-secure-store` on native devices (chunked becau
 `lib/sync/` contains the whole model:
 
 - `queue.ts` — a single coalesced pending snapshot with capped exponential backoff (2 s → 5 min).
-- `rows.ts` — maps `AppData` to flat rows and back. Remote admin flags are ignored on read.
+- `rows.ts` — maps `AppData` to flat rows and back. Remote admin flags and remote demo mode are ignored on read, so the demo admin stays local-only.
 - `engine.ts` — one reconciliation pass:
   - pending local changes → push the complete snapshot, then pull canonical rows;
   - no pending changes and remote has data → adopt the cloud copy;
   - empty cloud account → upload the local kitchen instead of wiping it.
-- `repository.ts` — Supabase implementation: chunked `upsert`/delete, all queries scoped by `user_id`, account deletion through the RPC.
+- `repository.ts` — Supabase implementation. `push()` first calls `apply_user_snapshot` so the whole snapshot lands in one transaction. If the RPC is missing (an older deployment that has only applied `0001_init.sql`), it falls back to the legacy per-table path: chunked writes followed by stale-id deletes, all queries scoped by `user_id`.
+- `orders` and `audit_logs` never require UPDATE permission. The RPC uses `ON CONFLICT (user_id, id) DO NOTHING`; the legacy path uses `ignoreDuplicates: true`. An id that already exists remotely is preserved instead of being overwritten, and only ids absent from the snapshot are deleted.
 
 A change is queued after a short debounce, pushed, and confirmed by a pull. A content hash prevents a pulled snapshot from being echoed straight back as a push. Failed syncs keep the local data untouched and retry on reconnect or when the app returns to the foreground.
+
+### Sync atomicity and known limitation
+
+With `0002_sync_rpc.sql` applied, a push is a single RPC and is therefore all-or-nothing: a rejected row rolls back the whole snapshot, including deletes.
+
+If the RPC is not present, the fallback path is **not** atomic. Each table now writes its replacement rows before deleting stale ids, which prevents an individual table from being emptied by a failed write, but a failure between tables can still leave the account partially updated (for example, plans replaced but pantry items not yet). Apply `0002_sync_rpc.sql` to remove this risk. The app does not use the service-role key in either path.
 
 Status is exposed as `cloud.status`: `disabled`, `signed_out`, `connecting`, `syncing`, `synced`, `offline`, `error`. Profile shows the current status, last sync time, pending changes and a manual retry.
 
@@ -114,3 +124,7 @@ Status is exposed as `cloud.status`: `disabled`, `signed_out`, `connecting`, `sy
 - Google OAuth.
 - Realtime multi-device conflict resolution beyond last-writer-wins.
 - Server-side recipe/ingredient catalogue. Recipes remain bundled with the app.
+
+## Verification status
+
+The schema, RPC and client changes in this repository are covered by static SQL assertions and unit tests with a fake Supabase client. They have **not** been run against a live Supabase project from this workspace. Before relying on them in production, apply both migrations to a disposable project and verify: profile creation on sign-up, rejected attempts to set `is_admin`/`email`/`auth_method`, repeated syncs containing existing order and audit-log ids, and rollback of a deliberately failing snapshot. The demo admin remains local-only and is never uploaded; device-only mode does not call Supabase at all.

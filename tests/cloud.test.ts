@@ -341,6 +341,19 @@ describe('remote snapshot mapping', () => {
     expect(restored.user?.isAdmin).toBe(false);
   });
 
+  test('never imports demo mode or admin privileges from a cloud row', () => {
+    const snapshot = toRemoteSnapshot(sampleState(), USER_ID);
+    const tampered = {
+      ...snapshot,
+      profile: snapshot.profile
+        ? { ...snapshot.profile, auth_method: 'demo' as const, is_admin: true }
+        : null,
+    };
+    const restored = fromRemoteSnapshot(tampered, createEmptyData());
+    expect(restored.user?.authMethod).toBe('email');
+    expect(restored.user?.isAdmin).toBe(false);
+  });
+
   test('detects whether the cloud already holds data', () => {
     expect(hasRemoteData(emptyRemoteSnapshot)).toBe(false);
     expect(hasRemoteData(toRemoteSnapshot(sampleState(), USER_ID))).toBe(true);

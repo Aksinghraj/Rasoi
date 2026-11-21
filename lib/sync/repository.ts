@@ -20,6 +20,8 @@ import {
 const UPSERT_CHUNK = 400;
 const DELETE_CHUNK = 200;
 
+type ReplaceMode = 'replace' | 'insert-only';
+
 interface PostgrestErrorLike {
   message: string;
   code?: string;
@@ -30,6 +32,25 @@ function raise(error: PostgrestErrorLike | null): void {
   const wrapped = new Error(error.message) as Error & { code?: string };
   wrapped.code = error.code;
   throw wrapped;
+}
+
+/**
+ * Older deployments may not have the transactional RPC from 0002 yet. In that
+ * case the repository falls back to the legacy per-table replacement, which is
+ * not atomic; see docs/BACKEND.md for the remaining risk.
+ */
+function isMissingSnapshotRpc(error: unknown): boolean {
+  const code =
+    error && typeof error === 'object' && 'code' in error
+      ? String((error as { code?: unknown }).code ?? '')
+      : '';
+  const message = (error instanceof Error ? error.message : String(error ?? '')).toLowerCase();
+  return (
+    code === '42883' ||
+    code === 'PGRST202' ||
+    message.includes('could not find the function') ||
+    (message.includes('apply_user_snapshot') && message.includes('does not exist'))
+  );
 }
 
 function chunk<T>(items: T[], size: number): T[][] {
@@ -52,9 +73,18 @@ export class SupabaseSyncRepository implements SyncRepository {
     private readonly userId: string,
   ) {}
 
+  /**
+   * Replaces one user-owned collection.
+   *
+   * Rows are written before stale ids are deleted so a failed write leaves the
+   * previous remote data intact. `insert-only` tables (orders, audit logs) use
+   * conflict-safe inserts because their migrations deliberately have no UPDATE
+   * policy: an existing id is preserved instead of being overwritten.
+   */
   private async replaceRows<T extends { id: string }>(
     table: string,
     rows: T[],
+    mode: ReplaceMode = 'replace',
   ): Promise<void> {
     const { data, error } = await this.client
       .from(table)
@@ -68,6 +98,18 @@ export class SupabaseSyncRepository implements SyncRepository {
     const local = new Set(rows.map((row) => row.id));
     const stale = [...existing].filter((id) => !local.has(id));
 
+    for (const rowsChunk of chunk(rows, UPSERT_CHUNK)) {
+      const { error: upsertError } = await this.client
+        .from(table)
+        .upsert(
+          rowsChunk,
+          mode === 'insert-only'
+            ? { onConflict: 'user_id,id', ignoreDuplicates: true }
+            : { onConflict: 'user_id,id' },
+        );
+      raise(upsertError);
+    }
+
     for (const ids of chunk(stale, DELETE_CHUNK)) {
       const { error: deleteError } = await this.client
         .from(table)
@@ -75,13 +117,6 @@ export class SupabaseSyncRepository implements SyncRepository {
         .eq('user_id', this.userId)
         .in('id', ids);
       raise(deleteError);
-    }
-
-    for (const rowsChunk of chunk(rows, UPSERT_CHUNK)) {
-      const { error: upsertError } = await this.client
-        .from(table)
-        .upsert(rowsChunk, { onConflict: 'user_id,id' });
-      raise(upsertError);
     }
   }
 
@@ -98,6 +133,13 @@ export class SupabaseSyncRepository implements SyncRepository {
     const local = new Set(rows.map((row) => row.recipe_id));
     const stale = [...existing].filter((id) => !local.has(id));
 
+    for (const rowsChunk of chunk(rows, UPSERT_CHUNK)) {
+      const { error: insertError } = await this.client
+        .from('favorites')
+        .upsert(rowsChunk, { onConflict: 'user_id,recipe_id', ignoreDuplicates: true });
+      raise(insertError);
+    }
+
     for (const ids of chunk(stale, DELETE_CHUNK)) {
       const { error: deleteError } = await this.client
         .from('favorites')
@@ -106,16 +148,25 @@ export class SupabaseSyncRepository implements SyncRepository {
         .in('recipe_id', ids);
       raise(deleteError);
     }
+  }
 
-    for (const rowsChunk of chunk(rows, UPSERT_CHUNK)) {
-      const { error: insertError } = await this.client
-        .from('favorites')
-        .upsert(rowsChunk, { onConflict: 'user_id,recipe_id', ignoreDuplicates: true });
-      raise(insertError);
+  /**
+   * Preferred path: one server-side transaction. If the RPC is not present yet
+   * (an older deployment), fall back to the legacy multi-call replacement.
+   */
+  async push(snapshot: RemoteSnapshot): Promise<void> {
+    try {
+      const { error } = await this.client.rpc('apply_user_snapshot', {
+        payload: { user_id: this.userId, ...snapshot },
+      });
+      raise(error);
+    } catch (error) {
+      if (!isMissingSnapshotRpc(error)) throw error;
+      await this.pushLegacy(snapshot);
     }
   }
 
-  async push(snapshot: RemoteSnapshot): Promise<void> {
+  private async pushLegacy(snapshot: RemoteSnapshot): Promise<void> {
     if (snapshot.profile) {
       const profile = { ...snapshot.profile, id: this.userId, is_admin: false };
       const { error } = await this.client.from('profiles').upsert(profile, { onConflict: 'id' });
@@ -152,8 +203,8 @@ export class SupabaseSyncRepository implements SyncRepository {
     await this.replaceRows<PantryRow>('pantry_items', snapshot.pantry);
     await this.replaceRows<ExtraRow>('grocery_extras', snapshot.extras);
     await this.replaceRows<CustomRecipeRow>('custom_recipes', snapshot.customRecipes);
-    await this.replaceRows<OrderRow>('orders', snapshot.orders);
-    await this.replaceRows<AuditRow>('audit_logs', snapshot.auditLogs);
+    await this.replaceRows<OrderRow>('orders', snapshot.orders, 'insert-only');
+    await this.replaceRows<AuditRow>('audit_logs', snapshot.auditLogs, 'insert-only');
     await this.replaceFavorites(snapshot.favorites);
   }
 
