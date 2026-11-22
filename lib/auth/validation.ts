@@ -47,6 +47,50 @@ export function mapCloudAuthError(message: string | null | undefined): string {
   return 'Sign-in failed. Check your connection and try again.';
 }
 
+/**
+ * Copy for a confirmation link that could not be redeemed.
+ *
+ * These links are single-use and time limited, and a PKCE link opened in a
+ * different browser cannot present its code verifier. None of that is a
+ * security failure: the account still exists and the password still works.
+ */
+export function mapConfirmationError(message: string | null | undefined): string {
+  const text = (message ?? '').toLowerCase();
+  if (!text) return 'We could not confirm this link. Sign in with your password to continue.';
+  if (text.includes('code verifier') || text.includes('pkce') || text.includes('flow state')) {
+    return 'This link was opened in a different browser or device than the one you signed up on. Your email is confirmed — sign in with your password.';
+  }
+  if (text.includes('expired')) {
+    return 'That confirmation link has expired. Sign in with your password, or request a new confirmation email.';
+  }
+  if (text.includes('already') || text.includes('used') || text.includes('consumed')) {
+    return 'That confirmation link was already used. Sign in with your password to continue.';
+  }
+  if (text.includes('invalid') || text.includes('not found') || text.includes('missing')) {
+    return 'That confirmation link is not valid. Open the newest email and try again.';
+  }
+  if (isNetworkError(text)) {
+    return 'You appear to be offline. Reconnect, then open the confirmation link again.';
+  }
+  return mapCloudAuthError(message);
+}
+
+/** Copy for `error`/`error_code` values Supabase puts in the callback URL. */
+export function describeAuthLinkError(
+  errorCode: string | null | undefined,
+  description: string | null | undefined,
+): string {
+  const code = (errorCode ?? '').toLowerCase();
+  const detail = (description ?? '').toLowerCase();
+  if (code === 'otp_expired' || detail.includes('expired')) {
+    return 'That confirmation link has expired. Sign in with your password, or request a new confirmation email.';
+  }
+  if (code === 'access_denied' || detail.includes('already')) {
+    return 'That confirmation link was already used or is no longer valid. Sign in with your password to continue.';
+  }
+  return mapConfirmationError(description ?? errorCode ?? null);
+}
+
 /** True when the Supabase error indicates a transport problem rather than bad input. */
 export function isNetworkError(message: string | null | undefined): boolean {
   const text = (message ?? '').toLowerCase();

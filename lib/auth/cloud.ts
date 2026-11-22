@@ -1,11 +1,15 @@
 import type { Session, User } from '@supabase/supabase-js';
 import { getSupabase } from '@/lib/supabase/client';
+import { resolveAuthCallbackUrl } from '@/lib/supabase/redirect';
+import type { AuthCallbackParams } from '@/lib/supabase/redirect-url';
 import { cloudAccountToProfile, CloudAccount } from '@/lib/auth/profile';
 import { UserProfile } from '@/lib/types';
 import {
+  describeAuthLinkError,
   isNetworkError,
   isValidEmail,
   mapCloudAuthError,
+  mapConfirmationError,
   normalizeEmail,
   passwordProblem,
 } from '@/lib/auth/validation';
@@ -127,10 +131,12 @@ export async function signUpWithPassword(
   const supabase = getSupabase();
   if (!supabase) return fail(NOT_CONFIGURED);
   try {
+    const emailRedirectTo = resolveAuthCallbackUrl() ?? undefined;
     const { data, error } = await supabase.auth.signUp({
       email: normalizeEmail(email),
       password,
       options: {
+        emailRedirectTo,
         data: name?.trim() ? { name: name.trim().slice(0, 60) } : undefined,
       },
     });
@@ -146,6 +152,63 @@ export async function signUpWithPassword(
     return { ok: true, data: accountFromUser(data.user) };
   } catch (error) {
     return fail(mapCloudAuthError(error instanceof Error ? error.message : null), true);
+  }
+}
+
+/**
+ * Redeems the parameters Supabase appends to the confirmation redirect.
+ *
+ * Three shapes are supported, because which one arrives depends on the email
+ * template and on whether the link was opened in the same browser:
+ * - `code` — the PKCE authorization code, exchanged for a session;
+ * - `token_hash` + `type` — verified directly, so it works when the email is
+ *   opened on a different device from the one that signed up;
+ * - `access_token` + `refresh_token` — the implicit-flow fragment.
+ */
+export async function completeEmailConfirmation(
+  params: AuthCallbackParams,
+): Promise<CloudResult<CloudAccount>> {
+  if (params.error || params.errorCode) {
+    return fail(describeAuthLinkError(params.errorCode, params.errorDescription ?? params.error));
+  }
+
+  const supabase = getSupabase();
+  if (!supabase) return fail(NOT_CONFIGURED);
+
+  try {
+    if (params.code) {
+      const { data, error } = await supabase.auth.exchangeCodeForSession(params.code);
+      if (error) return fail(mapConfirmationError(error.message), isNetworkError(error.message));
+      if (!data.user) return fail('The confirmation link did not return an account. Sign in instead.');
+      return { ok: true, data: accountFromUser(data.user) };
+    }
+
+    if (params.tokenHash) {
+      const type = (params.type ?? 'signup') as 'signup' | 'invite' | 'magiclink' | 'recovery' | 'email_change';
+      const { data, error } = await supabase.auth.verifyOtp({
+        token_hash: params.tokenHash,
+        type,
+      });
+      if (error) return fail(mapConfirmationError(error.message), isNetworkError(error.message));
+      if (!data.user) return fail('The confirmation link did not return an account. Sign in instead.');
+      return { ok: true, data: accountFromUser(data.user) };
+    }
+
+    if (params.accessToken && params.refreshToken) {
+      const { data, error } = await supabase.auth.setSession({
+        access_token: params.accessToken,
+        refresh_token: params.refreshToken,
+      });
+      if (error) return fail(mapConfirmationError(error.message), isNetworkError(error.message));
+      if (!data.user) return fail('The confirmation link did not return an account. Sign in instead.');
+      return { ok: true, data: accountFromUser(data.user) };
+    }
+
+    return fail(
+      'This confirmation link is missing its sign-in code. Open the newest confirmation email and try again.',
+    );
+  } catch (error) {
+    return fail(mapConfirmationError(error instanceof Error ? error.message : null), true);
   }
 }
 

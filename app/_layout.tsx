@@ -51,6 +51,7 @@ function RootNavigator() {
       >
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="auth" options={{ animation: 'fade' }} />
+        <Stack.Screen name="auth/callback" options={{ animation: 'fade' }} />
         <Stack.Screen name="onboarding" options={{ animation: 'fade' }} />
         <Stack.Screen name="recipe/[id]" />
         <Stack.Screen name="recipe/create" options={{ presentation: 'modal' }} />
