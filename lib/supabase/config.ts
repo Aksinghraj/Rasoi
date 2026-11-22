@@ -16,12 +16,24 @@ function isAcceptableUrl(value: string): boolean {
 }
 
 /**
+ * Expo only inlines `EXPO_PUBLIC_*` variables that are referenced statically
+ * with a full member expression. Reading the whole `process.env` object would
+ * leave these undefined in a release bundle, so collect them explicitly.
+ */
+function readPublicEnv(): EnvLike {
+  return {
+    EXPO_PUBLIC_SUPABASE_URL: process.env.EXPO_PUBLIC_SUPABASE_URL,
+    EXPO_PUBLIC_SUPABASE_ANON_KEY: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
+  };
+}
+
+/**
  * Reads the public Supabase configuration.
  *
  * Only the anon key is ever shipped to the client. Authorization is enforced by
  * Postgres Row Level Security, not by hiding a key.
  */
-export function readSupabaseConfig(env: EnvLike = process.env as EnvLike): SupabaseConfig | null {
+export function readSupabaseConfig(env: EnvLike = readPublicEnv()): SupabaseConfig | null {
   const url = env.EXPO_PUBLIC_SUPABASE_URL?.trim();
   const anonKey = env.EXPO_PUBLIC_SUPABASE_ANON_KEY?.trim();
   if (!url || !anonKey) return null;

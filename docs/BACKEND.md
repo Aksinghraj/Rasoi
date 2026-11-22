@@ -174,3 +174,24 @@ Known limitations that remain after review:
 - A profile's `email`/`auth_method` are derived at creation and preserved on client update. If the underlying auth email changes later, the profile row is not refreshed automatically.
 - If `0002_sync_rpc.sql` is not applied, the legacy per-table path is still not atomic across tables (documented above).
 - The demo admin remains local-only and is never uploaded; device-only mode does not call Supabase at all.
+
+## Live project probe
+
+The configured project (`ycktpapzhetlvakunena.supabase.co`) was probed from this workspace with the public publishable key only; no service-role key was used and no accounts or rows were created.
+
+Verified against the live project:
+
+- `GET /auth/v1/health` → `200` (GoTrue reachable).
+- `GET /rest/v1/profiles` with the publishable key → `401 / 42501 permission denied for table profiles`, which confirms the table exists and `anon` is denied, as the migration intends.
+- `POST /rest/v1/rpc/apply_user_snapshot` with the publishable key → `401 / 42501 permission denied for function apply_user_snapshot`, which confirms `0002_sync_rpc.sql` is applied and execution is not available to `anon`.
+- `POST /auth/v1/token?grant_type=password` with a deliberately invalid account → `400 invalid_credentials`, which confirms the email/password provider is reachable.
+- `@supabase/supabase-js` accepts the publishable key as the client API key (`Invalid login credentials` rather than an API-key error).
+
+Not verified from this workspace:
+
+- A **successful** email sign-in, because that needs a real mailbox, OTP or confirmed password account.
+- A **successful** `apply_user_snapshot` round trip, because that needs an authenticated session for a real account.
+- Phone OTP and Google OAuth, which still have no provider configured.
+
+`delete_my_account` is reachable with the publishable key and returns `Not signed in` (`P0001`) because `auth.uid()` is null. It therefore cannot delete anything without a session, but the live project's function grants differ from the explicit `authenticated`-only grant in `0001_init.sql` (Supabase default function privileges grant `EXECUTE` to `anon`). Re-running `0001_init.sql` after adding `revoke all on function public.delete_my_account() from anon;` would tighten that if desired.
+
