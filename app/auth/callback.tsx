@@ -1,19 +1,22 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Platform, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Linking from 'expo-linking';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button, InfoBanner, Txt } from '@/components/ui';
 import { colors, spacing } from '@/lib/theme';
-import { completeEmailConfirmation } from '@/lib/auth/cloud';
+import { completeEmailConfirmation, getCloudSession } from '@/lib/auth/cloud';
+import { useApp } from '@/lib/store/AppContext';
 import {
   AuthCallbackParams,
-  emptyCallbackParams,
   hasCallbackPayload,
   parseAuthCallbackUrl,
 } from '@/lib/supabase/redirect-url';
 
-type Phase = 'working' | 'confirmed' | 'failed';
+type Phase = 'working' | 'failed' | 'confirmed';
+
+const NO_PAYLOAD_MESSAGE =
+  'This page confirms email links. Open the link from your confirmation email, or sign in with your password.';
 
 /**
  * Email confirmation landing page.
@@ -21,54 +24,114 @@ type Phase = 'working' | 'confirmed' | 'failed';
  * Supabase redirects here after the person clicks the link in their inbox. The
  * link is redeemed with the same PKCE flow the app signs up with, then the app
  * routes into the kitchen. Expired, already-used and wrong-browser links get a
- * clear message instead of a dead end.
+ * clear message instead of a dead end, and an account that is already signed in
+ * is treated as success rather than as an error.
  */
 export default function AuthCallbackScreen() {
   const router = useRouter();
+  const { refreshCloudSession } = useApp();
+  // `useURL` covers both the cold-start deep link and links delivered while the
+  // app is already running; `getInitialURL` alone misses the second case.
+  const nativeUrl = Linking.useURL();
   const [phase, setPhase] = useState<Phase>('working');
   const [message, setMessage] = useState('Confirming your email…');
   const startedRef = useRef(false);
+  const navTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
-    if (startedRef.current) return;
-    startedRef.current = true;
+  const finish = useCallback(
+    (text: string) => {
+      setPhase('confirmed');
+      setMessage(text);
+      if (navTimerRef.current) clearTimeout(navTimerRef.current);
+      navTimerRef.current = setTimeout(() => router.replace('/(tabs)'), 900);
+    },
+    [router],
+  );
 
-    const readParams = async (): Promise<AuthCallbackParams> => {
-      if (Platform.OS === 'web') {
-        if (typeof window === 'undefined') return { ...emptyCallbackParams };
-        return parseAuthCallbackUrl(`${window.location.search}${window.location.hash}`);
-      }
-      const initial = await Linking.getInitialURL().catch(() => null);
-      return parseAuthCallbackUrl(initial);
-    };
+  const settle = useCallback(
+    async (params: AuthCallbackParams) => {
+      if (startedRef.current) return;
+      startedRef.current = true;
 
-    (async () => {
-      const params = await readParams();
-
-      if (Platform.OS === 'web' && typeof window !== 'undefined') {
-        // Do not leave the one-time code or tokens in the address bar/history.
-        window.history.replaceState(null, '', window.location.pathname);
-      }
+      const existing = await getCloudSession();
+      const alreadySignedIn = existing.ok && Boolean(existing.data);
 
       if (!hasCallbackPayload(params)) {
+        if (alreadySignedIn) {
+          finish('You are already signed in. Opening your kitchen…');
+          return;
+        }
         setPhase('failed');
-        setMessage('This page confirms email links. Open the link from your confirmation email, or sign in with your password.');
+        setMessage(NO_PAYLOAD_MESSAGE);
         return;
       }
 
       const result = await completeEmailConfirmation(params);
       if (!result.ok) {
+        // A used or expired link still means the account may be confirmed and
+        // this browser may already hold a session. Do not show a scary error.
+        if (alreadySignedIn) {
+          finish('You are already signed in. Opening your kitchen…');
+          return;
+        }
         setPhase('failed');
         setMessage(result.error ?? 'We could not confirm this link. Sign in with your password to continue.');
         return;
       }
 
-      setPhase('confirmed');
-      setMessage('Email confirmed. Opening your kitchen…');
-      // The auth listener in AppContext adopts the session and starts syncing.
-      setTimeout(() => router.replace('/(tabs)'), 700);
-    })();
-  }, [router]);
+      // Make the root provider adopt the session before navigating, so the
+      // route guard does not bounce the person back to sign-in.
+      const adopted = await refreshCloudSession();
+      if (!adopted) {
+        const persisted = await getCloudSession();
+        if (!persisted.ok || !persisted.data) {
+          setPhase('failed');
+          setMessage(
+            'Your email is confirmed, but the app could not open your session. Sign in with your password.',
+          );
+          return;
+        }
+      }
+
+      finish('Email confirmed. Opening your kitchen…');
+    },
+    [finish, refreshCloudSession],
+  );
+
+  // Web: the code/tokens arrive in the address bar. Strip them immediately so
+  // the one-time secret is not left in history.
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const params = parseAuthCallbackUrl(`${window.location.search}${window.location.hash}`);
+    window.history.replaceState(null, '', window.location.pathname);
+    void settle(params);
+  }, [settle]);
+
+  // Native: process the first URL that actually carries a payload. A bare app
+  // URL (or the initial base URL) is ignored until the deep link arrives.
+  useEffect(() => {
+    if (Platform.OS === 'web' || !nativeUrl || startedRef.current) return;
+    const params = parseAuthCallbackUrl(nativeUrl);
+    if (!hasCallbackPayload(params)) return;
+    void settle(params);
+  }, [nativeUrl, settle]);
+
+  // If no deep link ever arrives, stop spinning and offer a way forward.
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    const timer = setTimeout(() => {
+      if (startedRef.current) return;
+      void settle(parseAuthCallbackUrl(null));
+    }, 2500);
+    return () => clearTimeout(timer);
+  }, [settle]);
+
+  useEffect(
+    () => () => {
+      if (navTimerRef.current) clearTimeout(navTimerRef.current);
+    },
+    [],
+  );
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.cream }} edges={['top', 'bottom']}>

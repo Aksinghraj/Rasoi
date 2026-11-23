@@ -22,7 +22,10 @@ The app never pretends a cloud feature is available when it is not configured.
    - Enable *Email*.
    - For one-time codes, enable *Email OTP* (Supabase sends the six-digit code used by `sendEmailCode`).
    - For password accounts, decide whether *Confirm email* is on. If it is, `signUpWithPassword` returns `needsConfirmation` and the user must confirm before signing in.
-   - Under *Authentication → URL configuration*, add your app's redirect/deep-link URL if you enable email confirmation links.
+   - Under *Authentication → URL Configuration*:
+     - **Site URL**: the public HTTPS origin of the app (for example the current preview origin). Never leave this as `http://localhost:4000`, because Supabase falls back to the Site URL when a redirect is not allowlisted.
+     - **Redirect URLs**: add the exact callback URL, `<origin>/auth/callback`. Add one entry per environment (preview, staging, production) plus `rasoi://auth/callback` for the production Android deep link.
+   - Supabase silently ignores an `emailRedirectTo` that is not allowlisted and sends the link to the Site URL instead. That is the usual reason a phone shows `localhost:4000`.
 4. **Apply the schema.** Either:
    ```bash
    supabase link --project-ref <project-ref>
@@ -93,6 +96,15 @@ Every row is scoped by `user_id` (or `id` for `profiles`). Plan days are stored 
 | Google | — | Not connected. The UI says so instead of faking a sign-in. |
 
 Sessions are persisted with `expo-secure-store` on native devices (chunked because SecureStore has a value-size limit) and AsyncStorage on web. The client refreshes tokens only while the app is in the foreground.
+
+### Email confirmation callback
+
+`signUpWithPassword` passes `emailRedirectTo` built by `lib/supabase/redirect.ts`:
+
+- **Web** uses the page's public origin, falling back to `EXPO_PUBLIC_APP_URL` when the page is opened on localhost, then appends `/auth/callback`.
+- **Native** uses `EXPO_PUBLIC_NATIVE_AUTH_REDIRECT_URL` when explicitly set, otherwise the app scheme (`rasoi://auth/callback` via `Linking.createURL`). The web preview URL is never used for production native builds.
+
+`app/auth/callback.tsx` reads the code/tokens from the URL, redeems them with the existing PKCE client, verifies that the session was persisted, asks the root provider to adopt it, and only then routes into the app. Expired, invalid, already-used and already-confirmed links resolve to an explanatory screen or a normal signed-in session; they never crash or loop. Because PKCE stores the code verifier in the browser that started sign-up, a link opened in a different browser is confirmed on the server but cannot create a session there; the screen tells the person to sign in with their password. To make cross-device confirmation create a session, change the *Confirm signup* email template to link to `{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=signup`; the callback already supports that shape.
 
 ## Offline-first sync
 

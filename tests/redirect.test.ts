@@ -5,7 +5,10 @@ import {
   callbackUrlForBase,
   hasCallbackPayload,
   isAcceptableBaseUrl,
+  isLoopbackBaseUrl,
+  nativeRedirectUrlFromEnv,
   parseAuthCallbackUrl,
+  resolveWebCallbackBase,
 } from '@/lib/supabase/redirect-url';
 import { describeAuthLinkError, mapConfirmationError } from '@/lib/auth/validation';
 
@@ -34,6 +37,45 @@ describe('confirmation redirect url', () => {
     );
     expect(appBaseUrlFromEnv({})).toBeNull();
     expect(appBaseUrlFromEnv({ EXPO_PUBLIC_APP_URL: 'http://insecure.example.com' })).toBeNull();
+  });
+
+  test('detects loopback origins that a phone cannot reach', () => {
+    expect(isLoopbackBaseUrl('http://localhost:4000')).toBe(true);
+    expect(isLoopbackBaseUrl('http://127.0.0.1:4000')).toBe(true);
+    expect(isLoopbackBaseUrl('https://4000-preview.e2b.app')).toBe(false);
+    expect(isLoopbackBaseUrl(null)).toBe(false);
+  });
+
+  test('uses the public web origin and never falls back to localhost when a public URL exists', () => {
+    expect(resolveWebCallbackBase('https://4000-preview.e2b.app', 'https://other.example.com')).toBe(
+      'https://4000-preview.e2b.app',
+    );
+    expect(resolveWebCallbackBase('http://localhost:4000', 'https://4000-preview.e2b.app/')).toBe(
+      'https://4000-preview.e2b.app',
+    );
+    expect(resolveWebCallbackBase('http://127.0.0.1:4000', 'https://4000-preview.e2b.app')).toBe(
+      'https://4000-preview.e2b.app',
+    );
+    expect(resolveWebCallbackBase('http://localhost:4000', null)).toBe('http://localhost:4000');
+    expect(resolveWebCallbackBase(null, 'http://insecure.example.com')).toBeNull();
+  });
+
+  test('keeps the native redirect separate from the web preview URL', () => {
+    expect(nativeRedirectUrlFromEnv({})).toBeNull();
+    expect(
+      nativeRedirectUrlFromEnv({ EXPO_PUBLIC_NATIVE_AUTH_REDIRECT_URL: 'rasoi://auth/callback' }),
+    ).toBe('rasoi://auth/callback');
+    expect(
+      nativeRedirectUrlFromEnv({ EXPO_PUBLIC_NATIVE_AUTH_REDIRECT_URL: 'https://preview.example.com' }),
+    ).toBe(`https://preview.example.com${AUTH_CALLBACK_PATH}`);
+    expect(
+      nativeRedirectUrlFromEnv({
+        EXPO_PUBLIC_NATIVE_AUTH_REDIRECT_URL: 'https://preview.example.com/auth/callback',
+      }),
+    ).toBe('https://preview.example.com/auth/callback');
+    expect(
+      nativeRedirectUrlFromEnv({ EXPO_PUBLIC_NATIVE_AUTH_REDIRECT_URL: 'javascript:alert(1)' }),
+    ).toBeNull();
   });
 });
 

@@ -1,4 +1,4 @@
-import type { Session, User } from '@supabase/supabase-js';
+import type { Session, SupabaseClient, User } from '@supabase/supabase-js';
 import { getSupabase } from '@/lib/supabase/client';
 import { resolveAuthCallbackUrl } from '@/lib/supabase/redirect';
 import type { AuthCallbackParams } from '@/lib/supabase/redirect-url';
@@ -156,6 +156,47 @@ export async function signUpWithPassword(
 }
 
 /**
+ * A link can be opened after the account was already confirmed in another tab
+ * or on another device. If this browser already holds a session, that is a
+ * success, not an error worth alarming the person about.
+ */
+async function sessionIfAlreadySignedIn(
+  supabase: SupabaseClient,
+): Promise<CloudResult<CloudAccount> | null> {
+  const { data } = await supabase.auth.getSession();
+  if (data.session?.user) return { ok: true, data: accountFromUser(data.session.user) };
+  return null;
+}
+
+/**
+ * Confirms the session was written to the shared client storage, not just
+ * returned in memory. A storage failure must not look like a signed-in app.
+ */
+async function persistedSessionResult(
+  supabase: SupabaseClient,
+  fallbackUser?: User,
+): Promise<CloudResult<CloudAccount>> {
+  const { data } = await supabase.auth.getSession();
+  const user = data.session?.user ?? fallbackUser;
+  if (!data.session || !user) {
+    return fail(
+      'Your email is confirmed, but the session could not be saved on this device. Sign in with your password.',
+    );
+  }
+  return { ok: true, data: accountFromUser(user) };
+}
+
+function isAlreadyConfirmedError(message: string | null | undefined): boolean {
+  const text = (message ?? '').toLowerCase();
+  return (
+    text.includes('already') ||
+    text.includes('used') ||
+    text.includes('consumed') ||
+    text.includes('email confirmed')
+  );
+}
+
+/**
  * Redeems the parameters Supabase appends to the confirmation redirect.
  *
  * Three shapes are supported, because which one arrives depends on the email
@@ -168,19 +209,27 @@ export async function signUpWithPassword(
 export async function completeEmailConfirmation(
   params: AuthCallbackParams,
 ): Promise<CloudResult<CloudAccount>> {
-  if (params.error || params.errorCode) {
-    return fail(describeAuthLinkError(params.errorCode, params.errorDescription ?? params.error));
-  }
-
   const supabase = getSupabase();
   if (!supabase) return fail(NOT_CONFIGURED);
 
   try {
+    if (params.error || params.errorCode) {
+      const existing = await sessionIfAlreadySignedIn(supabase);
+      if (existing) return existing;
+      return fail(describeAuthLinkError(params.errorCode, params.errorDescription ?? params.error));
+    }
+
     if (params.code) {
       const { data, error } = await supabase.auth.exchangeCodeForSession(params.code);
-      if (error) return fail(mapConfirmationError(error.message), isNetworkError(error.message));
+      if (error) {
+        if (isAlreadyConfirmedError(error.message)) {
+          const existing = await sessionIfAlreadySignedIn(supabase);
+          if (existing) return existing;
+        }
+        return fail(mapConfirmationError(error.message), isNetworkError(error.message));
+      }
       if (!data.user) return fail('The confirmation link did not return an account. Sign in instead.');
-      return { ok: true, data: accountFromUser(data.user) };
+      return persistedSessionResult(supabase, data.user);
     }
 
     if (params.tokenHash) {
@@ -189,9 +238,15 @@ export async function completeEmailConfirmation(
         token_hash: params.tokenHash,
         type,
       });
-      if (error) return fail(mapConfirmationError(error.message), isNetworkError(error.message));
+      if (error) {
+        if (isAlreadyConfirmedError(error.message)) {
+          const existing = await sessionIfAlreadySignedIn(supabase);
+          if (existing) return existing;
+        }
+        return fail(mapConfirmationError(error.message), isNetworkError(error.message));
+      }
       if (!data.user) return fail('The confirmation link did not return an account. Sign in instead.');
-      return { ok: true, data: accountFromUser(data.user) };
+      return persistedSessionResult(supabase, data.user);
     }
 
     if (params.accessToken && params.refreshToken) {
@@ -199,10 +254,19 @@ export async function completeEmailConfirmation(
         access_token: params.accessToken,
         refresh_token: params.refreshToken,
       });
-      if (error) return fail(mapConfirmationError(error.message), isNetworkError(error.message));
+      if (error) {
+        if (isAlreadyConfirmedError(error.message)) {
+          const existing = await sessionIfAlreadySignedIn(supabase);
+          if (existing) return existing;
+        }
+        return fail(mapConfirmationError(error.message), isNetworkError(error.message));
+      }
       if (!data.user) return fail('The confirmation link did not return an account. Sign in instead.');
-      return { ok: true, data: accountFromUser(data.user) };
+      return persistedSessionResult(supabase, data.user);
     }
+
+    const existing = await sessionIfAlreadySignedIn(supabase);
+    if (existing) return existing;
 
     return fail(
       'This confirmation link is missing its sign-in code. Open the newest confirmation email and try again.',

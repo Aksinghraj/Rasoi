@@ -133,6 +133,7 @@ interface AppContextValue {
   verifyEmailCode: (email: string, code: string) => Promise<CloudActionResult>;
   signInWithPassword: (email: string, password: string) => Promise<CloudActionResult>;
   signUpWithPassword: (email: string, password: string, name?: string) => Promise<CloudActionResult>;
+  refreshCloudSession: () => Promise<boolean>;
   syncNow: () => Promise<void>;
   signInDemo: () => Promise<void>;
   signOut: () => Promise<void>;
@@ -963,6 +964,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [adoptCloudProfile],
   );
 
+  /**
+   * Adopts a session that was just established outside the normal sign-in
+   * actions, such as the email confirmation callback. Returns false when no
+   * persisted session is available yet.
+   */
+  const refreshCloudSession = useCallback(async (): Promise<boolean> => {
+    const result = await getCloudSession();
+    if (!result.ok || !result.data?.user) return false;
+    const profile = cloudUserToProfile(result.data.user, stateRef.current.user?.name);
+    const next = applyCloudIdentity(profile);
+    cloudReadyRef.current = true;
+    await runCloudSync(next);
+    return true;
+  }, [applyCloudIdentity, runCloudSync]);
+
   const syncNow = useCallback(async () => {
     await runCloudSync();
   }, [runCloudSync]);
@@ -1417,6 +1433,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     verifyEmailCode,
     signInWithPassword,
     signUpWithPassword,
+    refreshCloudSession,
     syncNow,
     signInDemo,
     signOut,

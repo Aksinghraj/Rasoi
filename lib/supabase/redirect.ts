@@ -4,29 +4,30 @@ import {
   AUTH_CALLBACK_PATH,
   appBaseUrlFromEnv,
   callbackUrlForBase,
-  isAcceptableBaseUrl,
+  nativeRedirectUrlFromEnv,
+  resolveWebCallbackBase,
 } from '@/lib/supabase/redirect-url';
 
 /**
  * The URL Supabase should send a person back to after they confirm their email.
  *
- * - Web: the origin the app is actually served from, so the preview host and a
- *   production domain both work without hardcoding either.
- * - Native with `EXPO_PUBLIC_APP_URL`: the public HTTPS app URL, which is what
- *   makes a confirmation link opened from Gmail on Android land somewhere real.
- * - Native without it: the app's own deep link (`rasoi://auth/callback`), which
- *   is the production Android path once the scheme is allowlisted in Supabase.
+ * - Web: the public origin the app is actually served from. A localhost origin
+ *   falls back to `EXPO_PUBLIC_APP_URL`, because a link emailed to a phone that
+ *   points at localhost is unreachable.
+ * - Native: an explicit `EXPO_PUBLIC_NATIVE_AUTH_REDIRECT_URL` when a build is
+ *   deliberately pointed at the HTTPS preview, otherwise the app's own deep
+ *   link (`rasoi://auth/callback`). The temporary web preview URL is never used
+ *   for production native builds, so the two paths stay separate.
  */
 export function resolveAuthCallbackUrl(): string | null {
   if (Platform.OS === 'web') {
     if (typeof window === 'undefined') return null;
-    const origin = window.location?.origin;
-    if (!origin || !isAcceptableBaseUrl(origin)) return null;
-    return callbackUrlForBase(origin);
+    const base = resolveWebCallbackBase(window.location?.origin, appBaseUrlFromEnv());
+    return base ? callbackUrlForBase(base) : null;
   }
 
-  const appUrl = appBaseUrlFromEnv();
-  if (appUrl) return callbackUrlForBase(appUrl);
+  const nativeRedirect = nativeRedirectUrlFromEnv();
+  if (nativeRedirect) return nativeRedirect;
 
   try {
     return Linking.createURL(AUTH_CALLBACK_PATH);
