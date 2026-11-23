@@ -69,9 +69,13 @@ export async function sendEmailCode(email: string): Promise<CloudResult<{ email:
   const supabase = getSupabase();
   if (!supabase) return fail(NOT_CONFIGURED);
   try {
+    // Without this, Supabase sends the link to the project's Site URL (often
+    // `/`) and the authorization code is never exchanged, so no session is
+    // created and the app keeps showing whatever local session it had.
+    const emailRedirectTo = resolveAuthCallbackUrl() ?? undefined;
     const { error } = await supabase.auth.signInWithOtp({
       email: normalizeEmail(email),
-      options: { shouldCreateUser: true },
+      options: { shouldCreateUser: true, emailRedirectTo },
     });
     if (error) return fail(mapCloudAuthError(error.message), isNetworkError(error.message));
     return { ok: true, data: { email: normalizeEmail(email) } };

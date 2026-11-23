@@ -29,7 +29,7 @@ const NO_PAYLOAD_MESSAGE =
  */
 export default function AuthCallbackScreen() {
   const router = useRouter();
-  const { refreshCloudSession } = useApp();
+  const { refreshCloudSession, state } = useApp();
   // `useURL` covers both the cold-start deep link and links delivered while the
   // app is already running; `getInitialURL` alone misses the second case.
   const nativeUrl = Linking.useURL();
@@ -74,8 +74,15 @@ export default function AuthCallbackScreen() {
           finish('You are already signed in. Opening your kitchen…');
           return;
         }
+        const demoNote =
+          state.user?.authMethod === 'demo'
+            ? ' You are still in the demo kitchen until a real sign-in succeeds.'
+            : '';
         setPhase('failed');
-        setMessage(result.error ?? 'We could not confirm this link. Sign in with your password to continue.');
+        setMessage(
+          (result.error ?? 'We could not confirm this link. Sign in with your password to continue.') +
+            demoNote,
+        );
         return;
       }
 
@@ -95,7 +102,7 @@ export default function AuthCallbackScreen() {
 
       finish('Email confirmed. Opening your kitchen…');
     },
-    [finish, refreshCloudSession],
+    [finish, refreshCloudSession, state.user?.authMethod],
   );
 
   // Web: the code/tokens arrive in the address bar. Strip them immediately so

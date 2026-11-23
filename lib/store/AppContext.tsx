@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppState } from 'react-native';
+import type { User } from '@supabase/supabase-js';
 import React, {
   createContext,
   useCallback,
@@ -587,8 +588,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const applyCloudIdentity = useCallback((profile: UserProfile): AppData => {
     const prev = stateRef.current;
+    // A demo kitchen, or another account's kitchen, must never carry over to a
+    // different authenticated user: it would both show the wrong account and be
+    // uploaded to that user's cloud rows on the next sync.
+    const switchedIdentity = prev.user !== null && prev.user.id !== profile.id;
+    const base = switchedIdentity ? createEmptyData() : prev;
     const next: AppData = {
-      ...prev,
+      ...base,
       user: profile,
       session: {
         userId: profile.id,
@@ -596,6 +602,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         signedInAt: new Date().toISOString(),
       },
     };
+    if (switchedIdentity) {
+      // Drop queued local changes that belonged to the previous identity.
+      persistQueue(emptyQueue);
+      lastSyncedHashRef.current = null;
+    }
     setState(next);
     stateRef.current = next;
     setCloud((current) => ({
@@ -605,6 +616,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       error: null,
     }));
     return next;
+  }, [persistQueue]);
+
+  /**
+   * Name fallback for a cloud user. Only the same account may contribute its
+   * local name; a demo kitchen's name must never be applied to a real account.
+   */
+  const cloudProfileFor = useCallback((user: User) => {
+    const prev = stateRef.current.user;
+    const fallback = prev && prev.id === user.id ? prev.name : undefined;
+    return cloudUserToProfile(user, fallback);
   }, []);
 
   const runCloudSync = useCallback(
@@ -699,8 +720,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const result = await getCloudSession();
       if (!mounted) return;
       if (result.ok && result.data?.user) {
-        const profile = cloudUserToProfile(result.data.user, stateRef.current.user?.name);
-        const next = applyCloudIdentity(profile);
+        const next = applyCloudIdentity(cloudProfileFor(result.data.user));
         cloudReadyRef.current = true;
         await runCloudSync(next);
       } else {
@@ -717,8 +737,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const unsubscribe = subscribeToCloudAuth((session) => {
       if (!mounted) return;
       if (session?.user) {
-        const profile = cloudUserToProfile(session.user, stateRef.current.user?.name);
-        const next = applyCloudIdentity(profile);
+        const next = applyCloudIdentity(cloudProfileFor(session.user));
         cloudReadyRef.current = true;
         void runCloudSync(next);
       } else if (cloudReadyRef.current) {
@@ -736,7 +755,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       mounted = false;
       unsubscribe?.();
     };
-  }, [applyCloudIdentity, runCloudSync]);
+  }, [applyCloudIdentity, cloudProfileFor, runCloudSync]);
 
   // Local changes are queued and pushed after a short debounce. The hash guard
   // stops a pull from being echoed back as a push.
@@ -972,12 +991,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const refreshCloudSession = useCallback(async (): Promise<boolean> => {
     const result = await getCloudSession();
     if (!result.ok || !result.data?.user) return false;
-    const profile = cloudUserToProfile(result.data.user, stateRef.current.user?.name);
-    const next = applyCloudIdentity(profile);
+    const next = applyCloudIdentity(cloudProfileFor(result.data.user));
     cloudReadyRef.current = true;
     await runCloudSync(next);
     return true;
-  }, [applyCloudIdentity, runCloudSync]);
+  }, [applyCloudIdentity, cloudProfileFor, runCloudSync]);
 
   const syncNow = useCallback(async () => {
     await runCloudSync();

@@ -72,7 +72,7 @@ export default function AuthScreen() {
       }
       setCloudCodeSent(true);
       setStage('code');
-      setNotice(`We emailed a six-digit code to ${identifier.trim()}.`);
+      setNotice(`We emailed ${identifier.trim()}. Open the sign-in link, or enter the six-digit code if your email includes one.`);
       return;
     }
     await new Promise((resolve) => setTimeout(resolve, 450));
@@ -251,7 +251,7 @@ export default function AuthScreen() {
                       value={identifier}
                       onChangeText={setIdentifier}
                       error={error ?? undefined}
-                      helper={emailUsesCloud ? 'We email a six-digit sign-in code.' : 'Local demo code. Cloud email is not configured.'}
+                      helper={emailUsesCloud ? 'We email a sign-in link, plus a six-digit code when enabled.' : 'Local demo code. Cloud email is not configured.'}
                     />
                   )}
 
@@ -267,7 +267,7 @@ export default function AuthScreen() {
                   {cloudCodeSent ? (
                     <InfoBanner
                       title="Check your inbox"
-                      message={`We sent a six-digit code to ${identifier.trim()}. It expires shortly, so use it soon.`}
+                      message={`We sent a sign-in link to ${identifier.trim()}. Open it on this device, or enter the six-digit code if your email shows one. Links and codes expire shortly.`}
                       tone="neutral"
                       icon={<Mail size={16} color={colors.inkSoft} />}
                     />
